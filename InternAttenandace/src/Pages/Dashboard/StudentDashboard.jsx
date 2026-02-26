@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
 import './StudentDashboard.css'
+import AttendancePage from '../Attendance/AttendancePage'
+import TasksPage from '../Tasks/TasksPage'
 
 // ── Mock Data (replace with real API calls later) ──
 const MOCK_USER = {
@@ -12,15 +14,15 @@ const MOCK_USER = {
 const MOCK_TASKS = [
   { id: 1, title: 'UI Design Review',        desc: 'Review and finalize the mockups for the admin panel. Send feedback to the design lead.',    priority: 'high',   status: 'in-progress' },
   { id: 2, title: 'Backend API Integration', desc: 'Connect the front-end login form to the authentication API endpoint.',                       priority: 'high',   status: 'pending' },
-  { id: 3, title: 'Weekly Report',           desc: 'Compile this week\'s progress and submit to your supervisor by Friday EOD.',                 priority: 'medium', status: 'pending' },
+  { id: 3, title: 'Weekly Report',           desc: "Compile this week's progress and submit to your supervisor by Friday EOD.",                  priority: 'medium', status: 'pending' },
   { id: 4, title: 'Database Schema Update',  desc: 'Update the attendance table to include time_out and total_hours columns.',                   priority: 'medium', status: 'done' },
   { id: 5, title: 'Onboarding Docs',         desc: 'Read through the company handbook and internal documentation wiki.',                         priority: 'low',    status: 'done' },
 ]
 
 const MOCK_LOGS = [
-  { date: 'Feb 24, Mon', timeIn: '8:02 AM',  timeOut: '5:04 PM',  duration: '9h 02m' },
-  { date: 'Feb 23, Sun', timeIn: '8:15 AM',  timeOut: '5:00 PM',  duration: '8h 45m' },
-  { date: 'Feb 22, Sat', timeIn: '8:00 AM',  timeOut: '4:58 PM',  duration: '8h 58m' },
+  { date: 'Feb 24, Mon', timeIn: '8:02 AM', timeOut: '5:04 PM', duration: '9h 02m' },
+  { date: 'Feb 23, Sun', timeIn: '8:15 AM', timeOut: '5:00 PM', duration: '8h 45m' },
+  { date: 'Feb 22, Sat', timeIn: '8:00 AM', timeOut: '4:58 PM', duration: '8h 58m' },
 ]
 
 // ── Helpers ──
@@ -49,70 +51,67 @@ function formatLogTime(date) {
   return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })
 }
 
-// ── Status labels ──
 const STATUS_LABELS = { pending: 'Pending', 'in-progress': 'In Progress', done: 'Done' }
 const FILTERS       = ['All', 'Pending', 'In Progress', 'Done']
 
-// ── Component ──
 export default function StudentDashboard({ onLogout }) {
-  const now            = useClockTime()
-  const [filter, setFilter]     = useState('All')
-  const [timeState, setTimeState] = useState('idle') // 'idle' | 'timed-in' | 'timed-out'
-  const [timeInAt,  setTimeInAt]  = useState(null)
-  const [timeOutAt, setTimeOutAt] = useState(null)
-  const [logs, setLogs]           = useState(MOCK_LOGS)
+  const now = useClockTime()
+  const [page, setPage]             = useState('dashboard') // 'dashboard' | 'attendance'
+  const [filter, setFilter]         = useState('All')
+  const [timeState, setTimeState]   = useState('idle')
+  const [timeInAt, setTimeInAt]     = useState(null)
+  const [timeOutAt, setTimeOutAt]   = useState(null)
+  const [logs, setLogs]             = useState(MOCK_LOGS)
 
   const user = MOCK_USER
-  const pct  = Math.min((user.hoursRendered / user.hoursRequired) * 100, 100).toFixed(1)
 
-  // Filter tasks
   const filteredTasks = MOCK_TASKS.filter(t => {
     if (filter === 'All') return true
     return STATUS_LABELS[t.status] === filter
   })
 
-  // Time In handler
   const handleTimeIn = () => {
-    const t = new Date()
-    setTimeInAt(t)
+    setTimeInAt(new Date())
     setTimeState('timed-in')
   }
 
-  // Time Out handler
   const handleTimeOut = () => {
     const t = new Date()
     setTimeOutAt(t)
     setTimeState('timed-out')
-
-    // Add to log
-    const inTime  = formatLogTime(timeInAt)
-    const outTime = formatLogTime(t)
-    const diffMs  = t - timeInAt
-    const diffH   = Math.floor(diffMs / 3600000)
-    const diffM   = Math.floor((diffMs % 3600000) / 60000)
-    const duration = `${diffH}h ${diffM.toString().padStart(2,'0')}m`
+    const inTime   = formatLogTime(timeInAt)
+    const outTime  = formatLogTime(t)
+    const diffMs   = t - timeInAt
+    const diffH    = Math.floor(diffMs / 3600000)
+    const diffM    = Math.floor((diffMs % 3600000) / 60000)
+    const duration = `${diffH}h ${diffM.toString().padStart(2, '0')}m`
     const dateStr  = t.toLocaleDateString('en-US', { month: 'short', day: 'numeric', weekday: 'short' })
-
     setLogs(prev => [{ date: dateStr, timeIn: inTime, timeOut: outTime, duration }, ...prev.slice(0, 4)])
   }
 
-  // Status message
   const statusMessage = {
-    idle:      'Not yet timed in today.',
+    idle:        'Not yet timed in today.',
     'timed-in':  `Timed in at ${timeInAt ? formatLogTime(timeInAt) : ''}. Have a productive day!`,
     'timed-out': `Timed out at ${timeOutAt ? formatLogTime(timeOutAt) : ''}. See you tomorrow!`,
   }[timeState]
 
+  // ── Show attendance page ──
+  if (page === 'attendance') {
+    return <AttendancePage onBack={() => setPage('dashboard')} />
+  }
+
+  // ── Show tasks page ──
+  if (page === 'tasks') {
+    return <TasksPage onBack={() => setPage('dashboard')} />
+  }
+
   return (
     <div className="dashboard">
-      {/* Topbar */}
       <header className="topbar">
         <div className="topbar-logo">Track<span>OJT</span></div>
         <div className="topbar-right">
           <span className="topbar-greeting">Hello, <strong>{user.name.split(' ')[0]}</strong></span>
-          <button className="btn-logout" onClick={onLogout}>
-            ⎋ Logout
-          </button>
+          <button className="btn-logout" onClick={onLogout}>⎋ Logout</button>
         </div>
       </header>
 
@@ -127,24 +126,16 @@ export default function StudentDashboard({ onLogout }) {
               <div className="profile-role">{user.role}</div>
             </div>
           </div>
-          <div className="hours-progress">
-            <div className="hours-label">
-              <span>OJT Hours Progress</span>
-              <span>{pct}%</span>
-            </div>
-            <div className="progress-bar-wrap">
-              <div className="progress-bar-fill" style={{ width: `${pct}%` }} />
-            </div>
-            <div className="hours-fraction">
-              {user.hoursRendered} <span>/ {user.hoursRequired} hrs</span>
-            </div>
+          <div className="hours-total">
+            <div className="hours-total-label">Total Hours Rendered</div>
+            <div className="hours-total-value">{user.hoursRendered}<span>hrs</span></div>
           </div>
         </div>
 
         {/* Main Grid */}
         <div className="main-grid">
 
-          {/* ── Time In / Out Card ── */}
+          {/* Time In/Out Card */}
           <div className="time-card">
             <div className="card-header">
               <div className="card-title">Attendance</div>
@@ -160,21 +151,9 @@ export default function StudentDashboard({ onLogout }) {
 
             <div className={`time-status ${timeState}`}>{statusMessage}</div>
 
-            {timeState === 'idle' && (
-              <button className="btn-timein" onClick={handleTimeIn}>
-                ↓ Time In
-              </button>
-            )}
-            {timeState === 'timed-in' && (
-              <button className="btn-timeout" onClick={handleTimeOut}>
-                ↑ Time Out
-              </button>
-            )}
-            {timeState === 'timed-out' && (
-              <button className="btn-timein" disabled>
-                ✓ Done for today
-              </button>
-            )}
+            {timeState === 'idle'      && <button className="btn-timein"  onClick={handleTimeIn}>↓ Time In</button>}
+            {timeState === 'timed-in'  && <button className="btn-timeout" onClick={handleTimeOut}>↑ Time Out</button>}
+            {timeState === 'timed-out' && <button className="btn-timein"  disabled>✓ Done for today</button>}
 
             {/* Recent Logs */}
             <div className="attendance-log">
@@ -191,16 +170,26 @@ export default function StudentDashboard({ onLogout }) {
                   </div>
                 ))}
               </div>
+
+              {/* Show More Button */}
+              <button className="btn-show-more" onClick={() => setPage('attendance')}>
+                View Full History →
+              </button>
             </div>
           </div>
 
-          {/* ── Tasks Card ── */}
+          {/* Tasks Card */}
           <div className="tasks-card">
             <div className="card-header">
               <div className="card-title">Tasks & Activities</div>
-              <span style={{ fontSize: '0.72rem', color: 'var(--muted)' }}>
-                {MOCK_TASKS.filter(t => t.status !== 'done').length} remaining
-              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <span style={{ fontSize: '0.72rem', color: 'var(--muted)' }}>
+                  {MOCK_TASKS.filter(t => t.status !== 'done').length} remaining
+                </span>
+                <button className="btn-show-more" style={{ margin: 0, width: 'auto', padding: '5px 12px' }} onClick={() => setPage('tasks')}>
+                  View All →
+                </button>
+              </div>
             </div>
 
             <div className="tasks-filters">
