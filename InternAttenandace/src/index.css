@@ -103,3 +103,55 @@ input, button {
   text-transform: uppercase;
   animation: blink 1s step-end infinite;
 }
+
+/* ── SHARED: status/priority tags (used across pages) ── */
+.priority-tag {
+  font-size: 0.62rem;
+  padding: 2px 8px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+}
+.priority-tag.high   { background: rgba(255,95,87,0.1);   color: #ff5f57;        border: 1px solid rgba(255,95,87,0.2); }
+.priority-tag.medium { background: rgba(245,158,11,0.1);  color: #f59e0b;        border: 1px solid rgba(245,158,11,0.2); }
+.priority-tag.low    { background: rgba(0,120,255,0.1);   color: var(--accent2); border: 1px solid rgba(0,120,255,0.2); }
+
+.status-tag {
+  font-size: 0.62rem;
+  padding: 2px 8px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.status-tag.pending     { background: rgba(107,114,128,0.1); color: var(--muted);   border: 1px solid var(--border); }
+.status-tag.in-progress { background: rgba(0,229,160,0.08);  color: var(--accent);  border: 1px solid rgba(0,229,160,0.2); }
+.status-tag.done        { background: rgba(0,120,255,0.08);  color: var(--accent2); border: 1px solid rgba(0,120,255,0.2); }
+
+.row-status {
+  font-size: 0.62rem;
+  padding: 3px 10px;
+  border-radius: 100px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  display: inline-block;
+}
+.row-status.complete { background: rgba(0,229,160,0.08);  color: var(--accent);  border: 1px solid rgba(0,229,160,0.2); }
+.row-status.absent   { background: rgba(255,95,87,0.08);   color: #ff5f57;        border: 1px solid rgba(255,95,87,0.2); }
+.row-status.late     { background: rgba(245,158,11,0.08);  color: #f59e0b;        border: 1px solid rgba(245,158,11,0.2); }
+
+.btn-back {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  padding: 8px 14px;
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  transition: border-color 0.2s, color 0.2s;
+  white-space: nowrap;
+}
+.btn-back:hover { border-color: var(--accent); color: var(--accent); }

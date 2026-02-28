@@ -1,28 +1,30 @@
 import { useState } from 'react'
 import './LoginPage.css'
+import { loginUser } from '../../firebase'
 
 export default function LoginPage({ onLogin }) {
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading]           = useState(false)
-  const [form, setForm]                 = useState({ username: '', password: '', remember: false })
+  const [error, setError]               = useState('')
+  const [form, setForm]                 = useState({ email: '', password: '', remember: false })
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target
     setForm(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value }))
   }
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
+    setError('')
     setLoading(true)
-
-    // TODO: Replace with Firebase auth later.
-    // After getting the user role, call onLogin(role):
-    //   onLogin('student')    → student dashboard
-    //   onLogin('supervisor') → supervisor dashboard
-    setTimeout(() => {
+    try {
+      const user = await loginUser(form.email, form.password)
+      onLogin(user.role, user)
+    } catch (err) {
+      setError(getFriendlyError(err.code))
+    } finally {
       setLoading(false)
-      onLogin('student')
-    }, 1000)
+    }
   }
 
   return (
@@ -30,59 +32,42 @@ export default function LoginPage({ onLogin }) {
       <div className="login-card">
         <div className="login-logo">Infocom<span>OJT</span></div>
         <div className="login-tagline">Attendance & Task Manager Portal</div>
-
         <h1 className="login-heading">Welcome back</h1>
 
         <form onSubmit={handleSubmit}>
-          {/* Username */}
           <div className="form-group">
-            <label htmlFor="username">Username</label>
+            <label htmlFor="email">Email</label>
             <input
-              id="username"
-              name="username"
-              type="text"
-              placeholder="Enter your username"
-              value={form.username}
-              onChange={handleChange}
-              autoComplete="username"
-              required
+              id="email" name="email" type="text"
+              placeholder="Enter your email"
+              value={form.email} onChange={handleChange}
+              autoComplete="email" required
             />
           </div>
 
-          {/* Password */}
           <div className="form-group">
             <label htmlFor="password">Password</label>
             <div className="password-wrap">
               <input
-                id="password"
-                name="password"
+                id="password" name="password"
                 type={showPassword ? 'text' : 'password'}
                 placeholder="••••••••"
-                value={form.password}
-                onChange={handleChange}
-                autoComplete="current-password"
-                required
+                value={form.password} onChange={handleChange}
+                autoComplete="current-password" required
               />
-              <button
-                type="button"
-                className="toggle-pw"
-                onClick={() => setShowPassword(p => !p)}
-                aria-label="Toggle password visibility"
-              >
+              <button type="button" className="toggle-pw"
+                onClick={() => setShowPassword(p => !p)}>
                 {showPassword ? '🙈' : '👁'}
               </button>
             </div>
           </div>
 
-          {/* Remember */}
+          {error && <div className="login-error">{error}</div>}
+
           <div className="form-footer-row">
             <label className="remember">
-              <input
-                type="checkbox"
-                name="remember"
-                checked={form.remember}
-                onChange={handleChange}
-              />
+              <input type="checkbox" name="remember"
+                checked={form.remember} onChange={handleChange} />
               Remember me
             </label>
           </div>
@@ -96,4 +81,19 @@ export default function LoginPage({ onLogin }) {
       </div>
     </div>
   )
+}
+
+function getFriendlyError(code) {
+  switch (code) {
+    case 'auth/user-not-found':
+    case 'auth/wrong-password':
+    case 'auth/invalid-credential':
+      return 'Invalid email or password.'
+    case 'auth/too-many-requests':
+      return 'Too many attempts. Please try again later.'
+    case 'auth/network-request-failed':
+      return 'Network error. Check your connection.'
+    default:
+      return 'Something went wrong. Please try again.'
+  }
 }
