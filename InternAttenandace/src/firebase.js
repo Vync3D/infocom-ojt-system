@@ -36,6 +36,11 @@ const app = initializeApp(firebaseConfig)
 export const auth = getAuth(app)
 export const db   = getFirestore(app)
 
+// Secondary app — used ONLY for creating new intern accounts
+// This prevents Firebase from auto-signing in the new user and kicking out the admin
+const secondaryApp  = initializeApp(firebaseConfig, 'secondary')
+const secondaryAuth = getAuth(secondaryApp)
+
 // ────────────────────────────────────────────
 // GEOFENCE CONFIG
 // ────────────────────────────────────────────
@@ -133,16 +138,15 @@ export async function getAllInterns() {
 
 // shift: 'day' | 'gy'
 export async function addIntern(email, password, name, hoursRequired = 600, shift = 'day') {
-  const credential = await createUserWithEmailAndPassword(auth, email, password)
+  // Use secondary auth instance so the admin session is NOT affected
+  const credential = await createUserWithEmailAndPassword(secondaryAuth, email, password)
   await setDoc(doc(db, "users", credential.user.uid), {
-    name,
-    email,
-    role: "student",
-    shift,
-    hoursRendered: 0,
-    hoursRequired,
+    name, email, role: "student", shift,
+    hoursRendered: 0, hoursRequired,
     createdAt: serverTimestamp(),
   })
+  // Sign out of secondary app immediately after — clean up
+  await signOut(secondaryAuth)
   return credential.user.uid
 }
 
