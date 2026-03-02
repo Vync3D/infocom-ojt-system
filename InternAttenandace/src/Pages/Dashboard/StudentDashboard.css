@@ -454,3 +454,18 @@
   .profile-banner { padding: 20px; }
   .hours-progress { min-width: 100%; align-items: flex-start; }
 }
+
+/* Geofence / timein error */
+.timein-error {
+  margin: 0 24px 12px;
+  padding: 10px 14px;
+  background: rgba(255,95,87,0.08);
+  border: 1px solid rgba(255,95,87,0.25);
+  border-radius: 8px;
+  color: #ff5f57;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}

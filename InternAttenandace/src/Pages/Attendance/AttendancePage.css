@@ -210,3 +210,45 @@
   }
   .td.duration, .td.status-col { grid-column: span 1; }
 }
+
+/* ── MONTH CONTROLS ── */
+.attendance-controls {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+  animation: fadeUp 0.4s ease 0.1s both;
+}
+.month-select-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 18px;
+  white-space: nowrap;
+  align-self: stretch;
+}
+.month-select-label {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+.month-select {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 28px 6px 10px;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  outline: none;
+  cursor: pointer;
+  transition: border-color 0.2s;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%236b7280' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+}
+.month-select:focus { border-color: var(--accent); }
+.month-select option { background: #1a1d22; }

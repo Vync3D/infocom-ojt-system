@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import './StudentDashboard.css'
 import AttendancePage from '../Attendance/AttendancePage'
 import TasksPage from '../Tasks/TasksPage'
-import { timeIn, timeOut, getAttendanceLogs, getTasksForIntern, logoutUser } from '../../firebase'
+import { timeIn, timeOut, getAttendanceLogs, getTasksForInternAll, logoutUser } from '../../firebase'
 
 function useClockTime() {
   const [now, setNow] = useState(new Date())
@@ -31,35 +31,48 @@ const FILTERS       = ['All', 'Pending', 'In Progress', 'Done']
 
 export default function StudentDashboard({ user, onLogout }) {
   const now = useClockTime()
-  const [page, setPage]           = useState('dashboard')
-  const [filter, setFilter]       = useState('All')
-  const [timeState, setTimeState] = useState('idle')
-  const [timeInAt, setTimeInAt]   = useState(null)
-  const [logs, setLogs]           = useState([])
-  const [tasks, setTasks]         = useState([])
+  const [page, setPage]             = useState('dashboard')
+  const [filter, setFilter]         = useState('All')
+  const [timeState, setTimeState]   = useState('idle')
+  const [timeInAt, setTimeInAt]     = useState(null)
+  const [logs, setLogs]             = useState([])
+  const [tasks, setTasks]           = useState([])
   const [loadingIn, setLoadingIn]   = useState(false)
   const [loadingOut, setLoadingOut] = useState(false)
   const [error, setError]           = useState('')
 
-  // Load attendance logs + tasks on mount
+  const shift = user?.shift || 'day'
+
   useEffect(() => {
     if (!user?.uid) return
-    const today = new Date().toISOString().split("T")[0]
+    const today = new Date().toISOString().split('T')[0]
+    // For GY shift, today's record might be stored under yesterday
+    const gyDate = (() => {
+      const h = new Date().getHours()
+      if (shift === 'gy' && h < 12) {
+        const y = new Date(); y.setDate(y.getDate() - 1)
+        return y.toISOString().split('T')[0]
+      }
+      return today
+    })()
+    const checkDate = shift === 'gy' ? gyDate : today
+
     getAttendanceLogs(user.uid).then(fetchedLogs => {
       setLogs(fetchedLogs)
-      const todayLog = fetchedLogs.find(l => l.date === today)
+      const todayLog = fetchedLogs.find(l => l.date === checkDate)
       if (todayLog) {
-        if (todayLog.timeOut) setTimeState("timed-out")
-        else { setTimeState("timed-in"); setTimeInAt(todayLog.timeIn?.toDate()) }
+        if (todayLog.timeOut) setTimeState('timed-out')
+        else { setTimeState('timed-in'); setTimeInAt(todayLog.timeIn?.toDate()) }
       }
     }).catch(console.error)
-    getTasksForIntern(user.uid).then(setTasks).catch(console.error)
+
+    getTasksForInternAll(user.uid).then(setTasks).catch(console.error)
   }, [user?.uid])
 
   const handleTimeIn = async () => {
     setLoadingIn(true); setError('')
     try {
-      await timeIn(user.uid)
+      await timeIn(user.uid, shift)
       setTimeInAt(new Date())
       setTimeState('timed-in')
       const updated = await getAttendanceLogs(user.uid)
@@ -72,7 +85,7 @@ export default function StudentDashboard({ user, onLogout }) {
   const handleTimeOut = async () => {
     setLoadingOut(true); setError('')
     try {
-      await timeOut(user.uid)
+      await timeOut(user.uid, shift)
       setTimeState('timed-out')
       const updated = await getAttendanceLogs(user.uid)
       setLogs(updated)
@@ -81,29 +94,31 @@ export default function StudentDashboard({ user, onLogout }) {
     } finally { setLoadingOut(false) }
   }
 
-  const handleLogout = async () => {
-    await logoutUser()
-    onLogout()
-  }
+  const handleLogout = async () => { await logoutUser(); onLogout() }
 
-  const filteredTasks = tasks.filter(t => {
-    if (filter === 'All') return true
-    return STATUS_LABELS[t.status] === filter
-  })
+  const filteredTasks = tasks.filter(t => filter === 'All' || STATUS_LABELS[t.status] === filter)
 
-  // Format log for display
   const formatLog = (log) => {
-    const timeInStr  = log.timeIn?.toDate  ? formatLogTime(log.timeIn.toDate())  : log.timeIn  || '—'
-    const timeOutStr = log.timeOut?.toDate ? formatLogTime(log.timeOut.toDate()) : log.timeOut || '—'
+    const timeInStr  = log.timeIn?.toDate  ? formatLogTime(log.timeIn.toDate())  : '—'
+    const timeOutStr = log.timeOut?.toDate ? formatLogTime(log.timeOut.toDate()) : '—'
     const dateStr    = log.date ? new Date(log.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', weekday: 'short' }) : '—'
     return { date: dateStr, timeIn: timeInStr, timeOut: timeOutStr, duration: log.duration || '—' }
   }
 
+  // Button label shows geofence check in progress
+  const timeInLabel  = loadingIn  ? '📍 Checking location...' : '↓ Time In'
+  const timeOutLabel = loadingOut ? '📍 Checking location...' : '↑ Time Out'
+
   const statusMessage = {
     idle:        'Not yet timed in today.',
     'timed-in':  `Timed in at ${timeInAt ? formatLogTime(timeInAt) : ''}. Have a productive day!`,
-    'timed-out': 'Timed out. See you tomorrow!',
+    'timed-out': 'Timed out. See you next shift!',
   }[timeState]
+
+  // Shift badge
+  const shiftBadge = shift === 'gy'
+    ? <span style={{ fontSize: '0.62rem', background: 'rgba(0,120,255,0.1)', color: 'var(--accent2)', border: '1px solid rgba(0,120,255,0.2)', padding: '2px 8px', borderRadius: '100px', letterSpacing: '0.08em', textTransform: 'uppercase' }}>GY Shift</span>
+    : <span style={{ fontSize: '0.62rem', background: 'rgba(0,229,160,0.08)', color: 'var(--accent)', border: '1px solid rgba(0,229,160,0.2)', padding: '2px 8px', borderRadius: '100px', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Day Shift</span>
 
   if (page === 'attendance') return <AttendancePage uid={user?.uid} onBack={() => setPage('dashboard')} />
   if (page === 'tasks')      return <TasksPage      uid={user?.uid} onBack={() => setPage('dashboard')} />
@@ -125,7 +140,10 @@ export default function StudentDashboard({ user, onLogout }) {
             <div className="avatar">{getInitials(user?.name)}</div>
             <div>
               <div className="profile-name">{user?.name || 'Intern'}</div>
-              <div className="profile-role">OJT Student</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
+                <div className="profile-role">OJT Student</div>
+                {shiftBadge}
+              </div>
             </div>
           </div>
           <div className="hours-total">
@@ -143,15 +161,23 @@ export default function StudentDashboard({ user, onLogout }) {
                 {timeState === 'timed-in' ? '● Timed In' : '○ Not In'}
               </span>
             </div>
+
             <div className="time-display">
               <div className="current-time">{formatTime(now)}</div>
               <div className="current-date">{formatDate(now)}</div>
             </div>
-            <div className={`time-status ${timeState}`}>{statusMessage}</div>
-            {error && <div style={{ margin: '0 24px', padding: '8px 12px', background: 'rgba(255,95,87,0.08)', border: '1px solid rgba(255,95,87,0.2)', borderRadius: '6px', color: '#ff5f57', fontSize: '0.72rem' }}>{error}</div>}
 
-            {timeState === 'idle'      && <button className="btn-timein"  onClick={handleTimeIn}  disabled={loadingIn}>{loadingIn  ? 'Logging...' : '↓ Time In'}</button>}
-            {timeState === 'timed-in'  && <button className="btn-timeout" onClick={handleTimeOut} disabled={loadingOut}>{loadingOut ? 'Logging...' : '↑ Time Out'}</button>}
+            <div className={`time-status ${timeState}`}>{statusMessage}</div>
+
+            {/* Error — includes geofence errors */}
+            {error && (
+              <div className="timein-error">
+                <span>📍</span> {error}
+              </div>
+            )}
+
+            {timeState === 'idle'      && <button className="btn-timein"  onClick={handleTimeIn}  disabled={loadingIn}>{timeInLabel}</button>}
+            {timeState === 'timed-in'  && <button className="btn-timeout" onClick={handleTimeOut} disabled={loadingOut}>{timeOutLabel}</button>}
             {timeState === 'timed-out' && <button className="btn-timein"  disabled>✓ Done for today</button>}
 
             <div className="attendance-log">

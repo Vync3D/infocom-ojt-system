@@ -32,16 +32,80 @@ const firebaseConfig = {
   measurementId: "G-3Z4TQNLLQL"
 }
 
-// ── Initialize ──
 const app = initializeApp(firebaseConfig)
 export const auth = getAuth(app)
 export const db   = getFirestore(app)
 
 // ────────────────────────────────────────────
+// GEOFENCE CONFIG
+// ────────────────────────────────────────────
+const OFFICE = { lat: 9.285833, lng: 123.267417 }
+const RADIUS_METERS = 50
+
+function getDistanceMeters(lat1, lng1, lat2, lng2) {
+  const R    = 6371000
+  const dLat = (lat2 - lat1) * Math.PI / 180
+  const dLng = (lng2 - lng1) * Math.PI / 180
+  const a    = Math.sin(dLat/2) * Math.sin(dLat/2) +
+               Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+               Math.sin(dLng/2) * Math.sin(dLng/2)
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
+}
+
+// Returns { allowed: bool, distance: number }
+export function checkGeofence(lat, lng) {
+  const distance = getDistanceMeters(lat, lng, OFFICE.lat, OFFICE.lng)
+  return { allowed: distance <= RADIUS_METERS, distance: Math.round(distance) }
+}
+
+// Get current position as a Promise
+export function getCurrentPosition() {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) {
+      reject(new Error('Geolocation is not supported by your browser.'))
+      return
+    }
+    navigator.geolocation.getCurrentPosition(resolve, (err) => {
+      if (err.code === 1) reject(new Error('Location permission denied. Please allow location access.'))
+      else if (err.code === 2) reject(new Error('Location unavailable. Try again.'))
+      else reject(new Error('Location request timed out. Try again.'))
+    }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 })
+  })
+}
+
+// ────────────────────────────────────────────
+// SHIFT HELPERS
+// ────────────────────────────────────────────
+// shift: 'day' | 'gy'
+// Day shift  — late after 9:00 AM
+// GY shift   — late after 10:00 PM
+
+function isLate(shift, date) {
+  const hour = date.getHours()
+  const min  = date.getMinutes()
+  if (shift === 'gy') return hour < 18 ? false : (hour > 22 || (hour === 22 && min > 0))
+  // day shift: late after 9:00 AM
+  return hour > 9 || (hour === 9 && min > 0)
+}
+
+// For GY shift: if intern times in at night, the "date" should be the night's date
+// e.g. timing in at 10 PM on Jan 1 → record date is Jan 1
+// e.g. timing out at 6 AM on Jan 2 → still belongs to Jan 1's record
+function getShiftDate(shift) {
+  const now  = new Date()
+  const hour = now.getHours()
+  // For GY shift: if it's early morning (before noon), the shift belongs to yesterday
+  if (shift === 'gy' && hour < 12) {
+    const yesterday = new Date(now)
+    yesterday.setDate(yesterday.getDate() - 1)
+    return yesterday.toISOString().split('T')[0]
+  }
+  return now.toISOString().split('T')[0]
+}
+
+// ────────────────────────────────────────────
 // AUTH
 // ────────────────────────────────────────────
-
-// Login — returns user + their role from Firestore
 export async function loginUser(email, password) {
   const credential = await signInWithEmailAndPassword(auth, email, password)
   const userDoc    = await getDoc(doc(db, "users", credential.user.uid))
@@ -49,44 +113,32 @@ export async function loginUser(email, password) {
   return { uid: credential.user.uid, ...userDoc.data() }
 }
 
-// Logout
 export async function logoutUser() {
   await signOut(auth)
 }
 
 // ────────────────────────────────────────────
-// USERS (Firestore: "users" collection)
+// USERS
 // ────────────────────────────────────────────
-// Each user doc looks like:
-// {
-//   name: "Maria Santos",
-//   email: "maria@intern.com",
-//   role: "student" | "admin",
-//   hoursRendered: 0,
-//   hoursRequired: 600,
-//   createdAt: timestamp
-// }
-
-// Get a single user
 export async function getUser(uid) {
   const snap = await getDoc(doc(db, "users", uid))
   return snap.exists() ? { uid: snap.id, ...snap.data() } : null
 }
 
-// Get all interns (role === "student")
 export async function getAllInterns() {
   const q    = query(collection(db, "users"), where("role", "==", "student"))
   const snap = await getDocs(q)
   return snap.docs.map(d => ({ uid: d.id, ...d.data() }))
 }
 
-// Add new intern (creates Firebase Auth account + Firestore doc)
-export async function addIntern(email, password, name, hoursRequired = 600) {
+// shift: 'day' | 'gy'
+export async function addIntern(email, password, name, hoursRequired = 600, shift = 'day') {
   const credential = await createUserWithEmailAndPassword(auth, email, password)
   await setDoc(doc(db, "users", credential.user.uid), {
     name,
     email,
     role: "student",
+    shift,
     hoursRendered: 0,
     hoursRequired,
     createdAt: serverTimestamp(),
@@ -94,12 +146,10 @@ export async function addIntern(email, password, name, hoursRequired = 600) {
   return credential.user.uid
 }
 
-// Remove intern (Firestore doc only — Auth deletion requires admin SDK)
 export async function removeIntern(uid) {
   await deleteDoc(doc(db, "users", uid))
 }
 
-// Update intern hours
 export async function updateHours(uid, hoursToAdd) {
   const userRef = doc(db, "users", uid)
   const snap    = await getDoc(userRef)
@@ -109,33 +159,41 @@ export async function updateHours(uid, hoursToAdd) {
   }
 }
 
-// ────────────────────────────────────────────
-// ATTENDANCE (Firestore: "attendance" collection)
-// ────────────────────────────────────────────
-// Each attendance doc looks like:
-// {
-//   uid: "user-id",
-//   date: "2026-02-26",
-//   timeIn: timestamp,
-//   timeOut: timestamp | null,
-//   duration: "8h 30m" | null,
-//   status: "complete" | "late" | "absent"
-// }
+// Update intern shift
+export async function updateInternShift(uid, shift) {
+  await updateDoc(doc(db, "users", uid), { shift })
+}
 
-// Time In — creates a new attendance record
-export async function timeIn(uid) {
-  const today   = new Date().toISOString().split("T")[0]
-  const docRef  = doc(db, "attendance", `${uid}_${today}`)
-  const snap    = await getDoc(docRef)
+// ────────────────────────────────────────────
+// ATTENDANCE
+// ────────────────────────────────────────────
+
+// Time In — checks geofence first, then records attendance
+export async function timeIn(uid, shift = 'day') {
+  // 1. Geofence check
+  const position = await getCurrentPosition()
+  const { allowed, distance } = checkGeofence(
+    position.coords.latitude,
+    position.coords.longitude
+  )
+  if (!allowed) {
+    throw new Error(`You are ${distance}m away from the office. You must be within ${RADIUS_METERS}m to time in.`)
+  }
+
+  // 2. Check if already timed in today
+  const today  = getShiftDate(shift)
+  const docRef = doc(db, "attendance", `${uid}_${today}`)
+  const snap   = await getDoc(docRef)
   if (snap.exists()) throw new Error("Already timed in today.")
 
-  const now     = new Date()
-  const hour    = now.getHours()
-  const status  = hour >= 9 ? "late" : "complete" // after 9AM = late
+  // 3. Record attendance
+  const now    = new Date()
+  const status = isLate(shift, now) ? "late" : "complete"
 
   await setDoc(docRef, {
     uid,
     date: today,
+    shift,
     timeIn: serverTimestamp(),
     timeOut: null,
     duration: null,
@@ -144,13 +202,25 @@ export async function timeIn(uid) {
   return { date: today, status }
 }
 
-// Time Out — updates the existing attendance record
-export async function timeOut(uid) {
-  const today  = new Date().toISOString().split("T")[0]
+// Time Out — also checks geofence
+export async function timeOut(uid, shift = 'day') {
+  // 1. Geofence check
+  const position = await getCurrentPosition()
+  const { allowed, distance } = checkGeofence(
+    position.coords.latitude,
+    position.coords.longitude
+  )
+  if (!allowed) {
+    throw new Error(`You are ${distance}m away from the office. You must be within ${RADIUS_METERS}m to time out.`)
+  }
+
+  // 2. Find today's record
+  const today  = getShiftDate(shift)
   const docRef = doc(db, "attendance", `${uid}_${today}`)
   const snap   = await getDoc(docRef)
   if (!snap.exists()) throw new Error("No time-in record found for today.")
 
+  // 3. Calculate duration
   const data       = snap.data()
   const timeInDate = data.timeIn.toDate()
   const now        = new Date()
@@ -159,18 +229,12 @@ export async function timeOut(uid) {
   const diffM      = Math.floor((diffMs % 3600000) / 60000)
   const duration   = `${diffH}h ${diffM.toString().padStart(2, "0")}m`
 
-  await updateDoc(docRef, {
-    timeOut: serverTimestamp(),
-    duration,
-  })
-
-  // Update total hours on the user doc
+  await updateDoc(docRef, { timeOut: serverTimestamp(), duration })
   await updateHours(uid, diffH + diffM / 60)
 
   return { duration }
 }
 
-// Get attendance logs for a user
 export async function getAttendanceLogs(uid) {
   const q    = query(
     collection(db, "attendance"),
@@ -181,40 +245,42 @@ export async function getAttendanceLogs(uid) {
   return snap.docs.map(d => ({ id: d.id, ...d.data() }))
 }
 
-// ────────────────────────────────────────────
-// TASKS (Firestore: "tasks" collection)
-// ────────────────────────────────────────────
-// Each task doc looks like:
-// {
-//   internUid: "user-id",
-//   title: "Fix login bug",
-//   desc: "...",
-//   priority: "high" | "medium" | "low",
-//   status: "pending" | "in-progress" | "done",
-//   assignedBy: "Sir Reyes",
-//   createdAt: timestamp
-// }
+export async function getTodayAttendance() {
+  const today = new Date().toISOString().split('T')[0]
+  // Also check yesterday for GY shift interns who started last night
+  const yesterday = new Date()
+  yesterday.setDate(yesterday.getDate() - 1)
+  const yd = yesterday.toISOString().split('T')[0]
 
-// Get tasks for a specific intern
+  const [todaySnap, ydSnap] = await Promise.all([
+    getDocs(query(collection(db, 'attendance'), where('date', '==', today))),
+    getDocs(query(collection(db, 'attendance'), where('date', '==', yd))),
+  ])
+
+  const todayDocs = todaySnap.docs.map(d => ({ id: d.id, ...d.data() }))
+  const ydDocs    = ydSnap.docs.map(d => ({ id: d.id, ...d.data() }))
+    .filter(d => d.shift === 'gy' && d.timeIn && !d.timeOut) // only active GY records from yesterday
+
+  return [...todayDocs, ...ydDocs]
+}
+
+// ────────────────────────────────────────────
+// TASKS
+// ────────────────────────────────────────────
 export async function getTasksForIntern(uid) {
   const q    = query(collection(db, "tasks"), where("internUid", "==", uid), orderBy("createdAt", "desc"))
   const snap = await getDocs(q)
   return snap.docs.map(d => ({ id: d.id, ...d.data() }))
 }
 
-// Get all tasks (admin view)
 export async function getAllTasks() {
   const snap = await getDocs(collection(db, "tasks"))
   return snap.docs.map(d => ({ id: d.id, ...d.data() }))
 }
 
-// Assign a new task
 export async function assignTask(internUid, title, desc, priority, assignedBy) {
   const ref = await addDoc(collection(db, "tasks"), {
-    internUid,
-    title,
-    desc,
-    priority,
+    internUid, title, desc, priority,
     status: "pending",
     assignedBy,
     createdAt: serverTimestamp(),
@@ -222,7 +288,29 @@ export async function assignTask(internUid, title, desc, priority, assignedBy) {
   return ref.id
 }
 
-// Update task status (used by intern)
 export async function updateTaskStatus(taskId, status) {
   await updateDoc(doc(db, "tasks", taskId), { status })
+}
+
+export async function assignGroupTask(memberUids, leaderUid, title, desc, priority, assignedBy) {
+  const ref = await addDoc(collection(db, 'tasks'), {
+    type: 'group', memberUids, leaderUid,
+    title, desc, priority,
+    status: 'pending',
+    assignedBy,
+    createdAt: serverTimestamp(),
+  })
+  return ref.id
+}
+
+export async function getTasksForInternAll(uid) {
+  const [soloSnap, groupSnap] = await Promise.all([
+    getDocs(query(collection(db, 'tasks'), where('internUid', '==', uid), orderBy('createdAt', 'desc'))),
+    getDocs(query(collection(db, 'tasks'), where('memberUids', 'array-contains', uid), orderBy('createdAt', 'desc'))),
+  ])
+  const solo  = soloSnap.docs.map(d => ({ id: d.id, type: 'solo', ...d.data() }))
+  const group = groupSnap.docs.map(d => ({ id: d.id, ...d.data() }))
+  const all   = [...solo, ...group]
+  const seen  = new Set()
+  return all.filter(t => { if (seen.has(t.id)) return false; seen.add(t.id); return true })
 }

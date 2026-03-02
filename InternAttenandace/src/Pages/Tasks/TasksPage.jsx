@@ -1,19 +1,19 @@
 import { useState, useEffect } from 'react'
 import './TasksPage.css'
-import { getTasksForIntern, updateTaskStatus } from '../../firebase'
+import { getTasksForInternAll, updateTaskStatus } from '../../firebase'
 
 const FILTERS         = ['All', 'Pending', 'In Progress', 'Done']
 const STATUS_LABELS   = { pending: 'Pending', 'in-progress': 'In Progress', done: 'Done' }
 const PRIORITY_LABELS = { high: '↑ High', medium: '→ Medium', low: '↓ Low' }
 
 export default function TasksPage({ uid, onBack }) {
-  const [tasks, setTasks]   = useState([])
-  const [filter, setFilter] = useState('All')
+  const [tasks, setTasks]     = useState([])
+  const [filter, setFilter]   = useState('All')
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     if (!uid) return
-    getTasksForIntern(uid)
+    getTasksForInternAll(uid)
       .then(setTasks)
       .catch(console.error)
       .finally(() => setLoading(false))
@@ -64,35 +64,77 @@ export default function TasksPage({ uid, onBack }) {
           ) : filtered.length === 0 ? (
             <div className="tasks-empty-state"><span>📭</span>No tasks in this category.</div>
           ) : (
-            filtered.map(task => (
-              <div key={task.id} className={`task-full-card ${task.status === 'done' ? 'done-card' : ''}`}>
-                <div className={`task-full-priority-bar ${task.priority}`} />
-                <div className="task-full-content">
-                  <div className="task-full-top">
-                    <div className="task-full-title">{task.title}</div>
-                    <span className={`priority-tag ${task.priority}`}>{PRIORITY_LABELS[task.priority]}</span>
-                  </div>
-                  <div className="task-full-desc">{task.desc}</div>
-                  <div className="task-full-meta">
-                    <div className="assigned-by">👤 Assigned by <strong>{task.assignedBy}</strong></div>
-                    <div className="meta-divider" />
-                    <span className={`status-tag ${task.status}`}>{STATUS_LABELS[task.status]}</span>
-                  </div>
-                  <div className="status-select-wrap">
-                    <span className="status-select-label">Update status:</span>
-                    <select
-                      className={`status-select ${task.status}`}
-                      value={task.status}
-                      onChange={e => handleStatusChange(task.id, e.target.value)}
-                    >
-                      <option value="pending">Pending</option>
-                      <option value="in-progress">In Progress</option>
-                      <option value="done">Done</option>
-                    </select>
+            filtered.map(task => {
+              const isGroup     = task.type === 'group'
+              const isLeader    = isGroup && task.leaderUid === uid
+              const canUpdate   = !isGroup || isLeader
+
+              return (
+                <div key={task.id} className={`task-full-card ${task.status === 'done' ? 'done-card' : ''}`}>
+                  <div className={`task-full-priority-bar ${task.priority}`} />
+                  <div className="task-full-content">
+
+                    <div className="task-full-top">
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                        <div className="task-full-title">{task.title}</div>
+                        {/* Group / Solo tag */}
+                        {isGroup ? (
+                          <span className="task-type-tag group">
+                            👥 Group {isLeader ? '· Leader' : '· Member'}
+                          </span>
+                        ) : (
+                          <span className="task-type-tag solo">👤 Solo</span>
+                        )}
+                      </div>
+                      <span className={`priority-tag ${task.priority}`}>{PRIORITY_LABELS[task.priority]}</span>
+                    </div>
+
+                    <div className="task-full-desc">{task.desc}</div>
+
+                    {/* Group info */}
+                    {isGroup && (
+                      <div className="group-info-row">
+                        <div className="group-info-item">
+                          <span className="group-info-label">👑 Leader</span>
+                          <span className="group-info-value">{isLeader ? 'You' : task.leaderName || 'Group Leader'}</span>
+                        </div>
+                        <div className="group-info-item">
+                          <span className="group-info-label">👥 Members</span>
+                          <span className="group-info-value">{task.memberUids?.length || 0} interns</span>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="task-full-meta">
+                      <div className="assigned-by">👤 Assigned by <strong>{task.assignedBy}</strong></div>
+                      <div className="meta-divider" />
+                      <span className={`status-tag ${task.status}`}>{STATUS_LABELS[task.status]}</span>
+                    </div>
+
+                    {/* Status updater — only leader can update group tasks */}
+                    {canUpdate ? (
+                      <div className="status-select-wrap">
+                        <span className="status-select-label">Update status:</span>
+                        <select
+                          className={`status-select ${task.status}`}
+                          value={task.status}
+                          onChange={e => handleStatusChange(task.id, e.target.value)}
+                        >
+                          <option value="pending">Pending</option>
+                          <option value="in-progress">In Progress</option>
+                          <option value="done">Done</option>
+                        </select>
+                      </div>
+                    ) : (
+                      <div className="status-locked">
+                        🔒 Only the group leader can update this status
+                      </div>
+                    )}
+
                   </div>
                 </div>
-              </div>
-            ))
+              )
+            })
           )}
         </div>
       </div>
