@@ -3,7 +3,8 @@ import './AdminDashboard.css'
 import {
   getAllInterns, addIntern, removeIntern,
   getAllTasks, assignTask, assignGroupTask, deleteTask,
-  getAttendanceLogs, getTodayAttendance, logoutUser, updateInternShift
+  getAttendanceLogs, getTodayAttendance, logoutUser, updateInternShift,
+  getShiftSettings, saveShiftSettings, editAttendanceRecord
 } from '../../firebase'
 
 // ── Helpers ──
@@ -29,6 +30,14 @@ function formatLog(log) {
 const STATUS_LABELS   = { pending: 'Pending', 'in-progress': 'In Progress', done: 'Done' }
 const PRIORITY_LABELS = { high: '↑ High', medium: '→ Medium', low: '↓ Low' }
 
+function to12Hour(time24) {
+  if (!time24) return ''
+  const [h, m] = time24.split(':').map(Number)
+  const ampm = h >= 12 ? 'PM' : 'AM'
+  const h12  = h % 12 || 12
+  return `${h12}:${m.toString().padStart(2, '0')} ${ampm}`
+}
+
 // ── Confirm Delete Modal ──
 function ConfirmModal({ name, onConfirm, onCancel }) {
   return (
@@ -45,30 +54,97 @@ function ConfirmModal({ name, onConfirm, onCancel }) {
   )
 }
 
+// ── Helpers ──
+function generatePassword() {
+  // 8 digit number password
+  return Math.floor(10000000 + Math.random() * 90000000).toString()
+}
+
 // ── Add Intern Modal ──
-function AddInternModal({ onAdd, onCancel }) {
-  const [form, setForm]       = useState({ name: '', email: '', password: '', hoursRequired: '600', shift: 'day' })
+function AddInternModal({ onAdd, onCancel, shiftSettings }) {
+  const [form, setForm]       = useState({
+    firstName: '', lastName: '', email: '',
+    password: generatePassword(),
+    hoursRequired: '600', shift: 'morning'
+  })
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState('')
+  const [created, setCreated] = useState(null) // holds { name, email, password } after success
+  const [copied, setCopied]   = useState(false)
+
   const handleChange = e => setForm(p => ({ ...p, [e.target.name]: e.target.value }))
+
   const handleSubmit = async (e) => {
     e.preventDefault(); setLoading(true); setError('')
-    try { await onAdd(form) } catch (err) { setError(err.message); setLoading(false) }
+    try {
+      const fullName = `${form.firstName.trim()} ${form.lastName.trim()}`
+      await onAdd({ ...form, name: fullName })
+      setCreated({ name: fullName, email: form.email, password: form.password })
+    } catch (err) { setError(err.message) }
+    finally { setLoading(false) }
   }
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(
+      `Name: ${created.name}\nEmail: ${created.email}\nPassword: ${created.password}`
+    )
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  const shiftLabel = (key) => {
+    const s = shiftSettings[key]
+    return `${s.label} (${to12Hour(s.start)} – ${to12Hour(s.end)})`
+  }
+
+  // ── Success screen ──
+  if (created) return (
+    <div className="modal-overlay"><div className="modal">
+      <div style={{ textAlign: 'center', marginBottom: 20 }}>
+        <div style={{ fontSize: '2rem', marginBottom: 8 }}>✅</div>
+        <div className="modal-title">Intern Created!</div>
+        <div className="modal-sub">Share these credentials with the intern.</div>
+      </div>
+      <div className="credentials-box">
+        <div className="credential-row"><span className="credential-label">Name</span><span className="credential-value">{created.name}</span></div>
+        <div className="credential-row"><span className="credential-label">Email</span><span className="credential-value">{created.email}</span></div>
+        <div className="credential-row"><span className="credential-label">Password</span><span className="credential-value credential-password">{created.password}</span></div>
+      </div>
+      <div className="modal-actions" style={{ marginTop: 20 }}>
+        <button className="btn-modal-cancel" onClick={onCancel}>Close</button>
+        <button className="btn-modal-confirm" onClick={handleCopy}>
+          {copied ? '✓ Copied!' : '📋 Copy Credentials'}
+        </button>
+      </div>
+    </div></div>
+  )
+
   return (
     <div className="modal-overlay"><div className="modal">
       <div className="modal-title">Add New Intern</div>
       <div className="modal-sub">Creates a login account for the intern.</div>
       <form className="modal-form" onSubmit={handleSubmit}>
-        <div className="modal-field"><label>Full Name</label><input name="name" placeholder="e.g. Maria Santos" value={form.name} onChange={handleChange} required /></div>
+        {/* Split name fields */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div className="modal-field"><label>First Name</label><input name="firstName" placeholder="e.g. Maria" value={form.firstName} onChange={handleChange} required /></div>
+          <div className="modal-field"><label>Last Name</label><input name="lastName" placeholder="e.g. Santos" value={form.lastName} onChange={handleChange} required /></div>
+        </div>
         <div className="modal-field"><label>Email</label><input name="email" type="email" placeholder="e.g. maria@email.com" value={form.email} onChange={handleChange} required /></div>
-        <div className="modal-field"><label>Password</label><input name="password" type="password" placeholder="min. 6 characters" value={form.password} onChange={handleChange} required /></div>
+        {/* Auto-generated password */}
+        <div className="modal-field">
+          <label>Password <span style={{ color: 'var(--muted)', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>(auto-generated)</span></label>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input name="password" value={form.password} onChange={handleChange} style={{ flex: 1, fontFamily: 'var(--font-display)', letterSpacing: '0.1em', fontSize: '1rem' }} required />
+            <button type="button" className="btn-icon" style={{ whiteSpace: 'nowrap' }} onClick={() => setForm(p => ({ ...p, password: generatePassword() }))}>↻ New</button>
+          </div>
+        </div>
         <div className="modal-field"><label>Required OJT Hours</label><input name="hoursRequired" type="number" value={form.hoursRequired} onChange={handleChange} /></div>
         <div className="modal-field">
           <label>Shift</label>
           <select name="shift" value={form.shift} onChange={handleChange}>
-            <option value="day">Day Shift (starts ~8–9 AM)</option>
-            <option value="gy">GY Shift (starts ~10 PM)</option>
+            <option value="morning">{shiftLabel('morning')}</option>
+            <option value="mid">{shiftLabel('mid')}</option>
+            <option value="gy">{shiftLabel('gy')}</option>
           </select>
         </div>
         {error && <div style={{ color: '#ff5f57', fontSize: '0.75rem', padding: '8px 0' }}>{error}</div>}
@@ -203,6 +279,140 @@ function AssignGroupModal({ interns, onAssign, onCancel }) {
   )
 }
 
+// ── Edit Attendance Modal ──
+function EditAttendanceModal({ log, onSave, onCancel }) {
+  const fmt24 = (date) => date
+    ? date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })
+    : ''
+
+  const [timeIn,  setTimeIn]  = useState(log.timeIn?.toDate  ? fmt24(log.timeIn.toDate())  : '')
+  const [timeOut, setTimeOut] = useState(log.timeOut?.toDate ? fmt24(log.timeOut.toDate()) : '')
+  const [saving,  setSaving]  = useState(false)
+  const [error,   setError]   = useState('')
+
+  const handleSave = async () => {
+    if (!timeIn) { setError('Time in is required.'); return }
+    setSaving(true); setError('')
+    try { await onSave(timeIn, timeOut || null) }
+    catch (e) { setError(e.message); setSaving(false) }
+  }
+
+  return (
+    <div className="modal-overlay"><div className="modal">
+      <div className="modal-title">Edit Attendance</div>
+      <div className="modal-sub">
+        Manually correct the time in/out for <strong>{log.date}</strong>.
+      </div>
+      <div className="modal-form">
+        <div className="modal-field">
+          <label>Time In</label>
+          <input type="time" value={timeIn} onChange={e => setTimeIn(e.target.value)} />
+        </div>
+        <div className="modal-field">
+          <label>Time Out <span style={{ color: 'var(--muted)', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>(leave empty if still on shift)</span></label>
+          <input type="time" value={timeOut} onChange={e => setTimeOut(e.target.value)} />
+        </div>
+        {error && <div style={{ color: '#ff5f57', fontSize: '0.75rem' }}>{error}</div>}
+        <div className="modal-actions">
+          <button className="btn-modal-cancel" onClick={onCancel}>Cancel</button>
+          <button className="btn-modal-confirm" onClick={handleSave} disabled={saving}>
+            {saving ? 'Saving...' : 'Save Changes'}
+          </button>
+        </div>
+      </div>
+    </div></div>
+  )
+}
+
+// ── Settings Tab ──
+function SettingsTab({ shiftSettings, onSave }) {
+  const [settings, setSettings] = useState(JSON.parse(JSON.stringify(shiftSettings)))
+  const [saved, setSaved]       = useState(false)
+  const [saving, setSaving]     = useState(false)
+
+  const handleChange = (shift, field, value) => {
+    setSettings(prev => ({
+      ...prev,
+      [shift]: { ...prev[shift], [field]: value }
+    }))
+  }
+
+  const handleSave = async () => {
+    setSaving(true)
+    await onSave(settings)
+    setSaving(false)
+    setSaved(true)
+    setTimeout(() => setSaved(false), 2500)
+  }
+
+  const shiftKeys = ['morning', 'mid', 'gy']
+  const shiftIcons = { morning: '🌅', mid: '🌤️', gy: '🌙' }
+
+  return (
+    <div className="admin-card">
+      <div className="admin-card-header">
+        <div className="admin-card-title">Shift Settings</div>
+        <button className="btn-add" onClick={handleSave} disabled={saving}>
+          {saving ? 'Saving...' : saved ? '✓ Saved!' : 'Save Changes'}
+        </button>
+      </div>
+      <div className="settings-body">
+        <div className="settings-desc">
+          Configure the time range and late cutoff for each shift. These apply to all interns assigned to that shift.
+        </div>
+        <div className="shift-settings-grid">
+          {shiftKeys.map(key => (
+            <div className="shift-setting-card" key={key}>
+              <div className="shift-setting-header">
+                <span className="shift-setting-icon">{shiftIcons[key]}</span>
+                <div>
+                  <div className="shift-setting-name">{settings[key].label} Shift</div>
+                  <div className="shift-setting-sub">
+                    {to12Hour(settings[key].start)} – {to12Hour(settings[key].end)}
+                  </div>
+                </div>
+              </div>
+              <div className="shift-setting-fields">
+                <div className="shift-field">
+                  <label>Shift Label</label>
+                  <input
+                    value={settings[key].label}
+                    onChange={e => handleChange(key, 'label', e.target.value)}
+                  />
+                </div>
+                <div className="shift-field">
+                  <label>Start Time</label>
+                  <input
+                    type="time"
+                    value={settings[key].start}
+                    onChange={e => handleChange(key, 'start', e.target.value)}
+                  />
+                </div>
+                <div className="shift-field">
+                  <label>End Time</label>
+                  <input
+                    type="time"
+                    value={settings[key].end}
+                    onChange={e => handleChange(key, 'end', e.target.value)}
+                  />
+                </div>
+                <div className="shift-field">
+                  <label>Late After</label>
+                  <input
+                    type="time"
+                    value={settings[key].lateAfter}
+                    onChange={e => handleChange(key, 'lateAfter', e.target.value)}
+                  />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Main Component ──
 export default function AdminDashboard({ user, onLogout }) {
   const [tab, setTab]             = useState('interns')
@@ -218,10 +428,17 @@ export default function AdminDashboard({ user, onLogout }) {
   const [todayAttendance, setTodayAttendance]     = useState([])
   const [selectedMonth, setSelectedMonth]         = useState('all')
   const [hoveredTaskId, setHoveredTaskId]         = useState(null)
+  const [internShiftFilter, setInternShiftFilter] = useState('all')
+  const [editingLog, setEditingLog]               = useState(null) // { log, internUid }
+  const [shiftSettings, setShiftSettings]         = useState({
+    morning: { label: 'Morning', start: '07:00', end: '15:00', lateAfter: '07:00' },
+    mid:     { label: 'Mid',     start: '13:00', end: '22:00', lateAfter: '13:00' },
+    gy:      { label: 'GY',      start: '22:00', end: '07:00', lateAfter: '22:00' },
+  })
 
   useEffect(() => {
-    Promise.all([getAllInterns(), getAllTasks(), getTodayAttendance()])
-      .then(([i, t, att]) => { setInterns(i); setTasks(t); setTodayAttendance(att) })
+    Promise.all([getAllInterns(), getAllTasks(), getTodayAttendance(), getShiftSettings()])
+      .then(([i, t, att, shifts]) => { setInterns(i); setTasks(t); setTodayAttendance(att); setShiftSettings(shifts) })
       .catch(console.error)
       .finally(() => setLoadingData(false))
   }, [])
@@ -234,7 +451,8 @@ export default function AdminDashboard({ user, onLogout }) {
 
   const handleAddIntern = async (form) => {
     await addIntern(form.email, form.password, form.name, parseInt(form.hoursRequired), form.shift)
-    setInterns(await getAllInterns()); setModal(null)
+    setInterns(await getAllInterns())
+    // Don't close modal here — AddInternModal shows success screen itself
   }
 
   const handleRemoveIntern = async () => {
@@ -259,15 +477,32 @@ export default function AdminDashboard({ user, onLogout }) {
     setModal(null); setSelectedTask(null)
   }
 
+  const handleEditAttendance = async (timeInStr, timeOutStr) => {
+    const { log, internUid } = editingLog
+    const toDate = (str) => {
+      const [h, m] = str.split(':').map(Number)
+      const d = new Date(`${log.date}T00:00:00`)
+      d.setHours(h, m, 0, 0)
+      return d
+    }
+    const timeInDate  = toDate(timeInStr)
+    const timeOutDate = timeOutStr ? toDate(timeOutStr) : null
+    // If timeout is before timein (crosses midnight), add a day
+    if (timeOutDate && timeOutDate < timeInDate) timeOutDate.setDate(timeOutDate.getDate() + 1)
+    await editAttendanceRecord(internUid, log.date, timeInDate, timeOutDate)
+    setAttendanceLogs(await getAttendanceLogs(internUid))
+    setEditingLog(null)
+  }
+
   const handleLogout = async () => { await logoutUser(); onLogout() }
 
-  const presentCount = todayAttendance.filter(a => a.timeIn && !a.timeOut).length
+  const presentCount = todayAttendance.filter(a => a.timeIn && !a.timeOut && interns.find(i => i.uid === a.uid)).length
   const soloTasks    = tasks.filter(t => t.type !== 'group')
   const groupTasks   = tasks.filter(t => t.type === 'group')
 
   return (
     <div className="admin-dashboard">
-      {modal === 'add'          && <AddInternModal onAdd={handleAddIntern} onCancel={() => setModal(null)} />}
+      {modal === 'add'          && <AddInternModal onAdd={handleAddIntern} onCancel={() => setModal(null)} shiftSettings={shiftSettings} />}
       {modal === 'assign-solo'  && <AssignSoloModal  interns={interns} onAssign={handleAssignSolo}  onCancel={() => setModal(null)} />}
       {modal === 'assign-group' && <AssignGroupModal interns={interns} onAssign={handleAssignGroup} onCancel={() => setModal(null)} />}
       {modal === 'confirm-remove' && <ConfirmModal name={selectedIntern?.name} onConfirm={handleRemoveIntern} onCancel={() => setModal(null)} />}
@@ -281,6 +516,7 @@ export default function AdminDashboard({ user, onLogout }) {
           </div>
         </div></div>
       )}
+      {editingLog && <EditAttendanceModal log={editingLog.log} onSave={handleEditAttendance} onCancel={() => setEditingLog(null)} />}
 
       <header className="admin-topbar">
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -316,7 +552,7 @@ export default function AdminDashboard({ user, onLogout }) {
                 <div className="present-tooltip-empty">No one is timed in right now.</div>
               ) : (
                 todayAttendance
-                  .filter(a => a.timeIn && !a.timeOut)
+                  .filter(a => a.timeIn && !a.timeOut && interns.find(i => i.uid === a.uid))
                   .map(a => {
                     const intern  = interns.find(i => i.uid === a.uid)
                     const timeInStr = a.timeIn?.toDate
@@ -341,7 +577,7 @@ export default function AdminDashboard({ user, onLogout }) {
 
         {/* Main Tabs */}
         <div className="admin-tabs">
-          {[['interns','👥 Interns'],['tasks','✅ Tasks'],['attendance','◷ Attendance']].map(([key, label]) => (
+          {[['interns','👥 Interns'],['tasks','✅ Tasks'],['attendance','◷ Attendance'],['settings','⚙️ Settings']].map(([key, label]) => (
             <button key={key} className={`admin-tab ${tab === key ? 'active' : ''}`}
               onClick={() => { setTab(key); setViewingAttendance(null) }}>{label}</button>
           ))}
@@ -356,7 +592,24 @@ export default function AdminDashboard({ user, onLogout }) {
               <div className="admin-card">
                 <div className="admin-card-header">
                   <div className="admin-card-title">All Interns</div>
-                  <button className="btn-add" onClick={() => setModal('add')}>+ Add Intern</button>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                    {/* Shift filter */}
+                    <div className="task-subtabs">
+                      {[['all','All'], ['morning','🌅 Morning'], ['mid','🌤️ Mid'], ['gy','🌙 GY']].map(([val, label]) => (
+                        <button
+                          key={val}
+                          className={`task-subtab ${internShiftFilter === val ? 'active' : ''}`}
+                          onClick={() => setInternShiftFilter(val)}
+                        >
+                          {label}
+                          <span className="subtab-count">
+                            {val === 'all' ? interns.length : interns.filter(i => i.shift === val).length}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                    <button className="btn-add" onClick={() => setModal('add')}>+ Add Intern</button>
+                  </div>
                 </div>
                 <div className="intern-table-header">
                   <div className="intern-th">Intern</div>
@@ -365,8 +618,14 @@ export default function AdminDashboard({ user, onLogout }) {
                   <div className="intern-th">Actions</div>
                 </div>
                 <div className="intern-rows">
-                  {interns.length === 0 && <div style={{ padding: '48px 24px', textAlign: 'center', color: 'var(--muted)', fontSize: '0.8rem' }}>No interns yet.</div>}
-                  {interns.map(intern => {
+                  {interns.filter(intern => internShiftFilter === 'all' || intern.shift === internShiftFilter).length === 0 && internShiftFilter !== 'all' && (
+                    <div style={{ padding: '48px 24px', textAlign: 'center', color: 'var(--muted)', fontSize: '0.8rem' }}>
+                      No interns on {internShiftFilter} shift.
+                    </div>
+                  )}
+                  {interns
+                    .filter(intern => internShiftFilter === 'all' || intern.shift === internShiftFilter)
+                    .map(intern => {
                     const internTasks = tasks.filter(t =>
                       (t.type !== 'group' && t.internUid === intern.uid) ||
                       (t.type === 'group' && t.memberUids?.includes(intern.uid))
@@ -383,10 +642,10 @@ export default function AdminDashboard({ user, onLogout }) {
                               <span style={{
                                 fontSize: '0.58rem', padding: '1px 6px', borderRadius: '100px',
                                 textTransform: 'uppercase', letterSpacing: '0.07em', fontWeight: 600,
-                                background: intern.shift === 'gy' ? 'rgba(0,120,255,0.1)' : 'rgba(0,229,160,0.08)',
-                                color: intern.shift === 'gy' ? 'var(--accent2)' : 'var(--accent)',
-                                border: intern.shift === 'gy' ? '1px solid rgba(0,120,255,0.2)' : '1px solid rgba(0,229,160,0.2)',
-                              }}>{intern.shift === 'gy' ? 'GY' : 'Day'}</span>
+                                background: intern.shift === 'gy' ? 'rgba(0,120,255,0.08)' : intern.shift === 'mid' ? 'rgba(245,158,11,0.08)' : 'rgba(0,229,160,0.08)',
+                                color: intern.shift === 'gy' ? 'var(--accent2)' : intern.shift === 'mid' ? '#f59e0b' : 'var(--accent)',
+                                border: intern.shift === 'gy' ? '1px solid rgba(0,120,255,0.2)' : intern.shift === 'mid' ? '1px solid rgba(245,158,11,0.2)' : '1px solid rgba(0,229,160,0.2)',
+                              }}>{intern.shift === 'gy' ? '🌙 GY' : intern.shift === 'mid' ? '🌤️ Mid' : '🌅 Morning'}</span>
                             </div>
                           </div>
                         </div>
@@ -571,22 +830,52 @@ export default function AdminDashboard({ user, onLogout }) {
                         <div className="attendance-intern-sub">{viewingAttendance.email} · {Math.floor(viewingAttendance.hoursRendered || 0)} hrs rendered</div>
                       </div>
                     </div>
-                    <div className="intern-table-header" style={{ gridTemplateColumns: '1.2fr 1fr 1fr 0.8fr' }}>
-                      <div className="intern-th">Date</div><div className="intern-th">Time In</div>
-                      <div className="intern-th">Time Out</div><div className="intern-th">Duration</div>
+                    <div className="intern-table-header" style={{ gridTemplateColumns: '1.2fr 1fr 1fr 0.8fr 0.6fr' }}>
+                      <div className="intern-th">Date</div>
+                      <div className="intern-th">Time In</div>
+                      <div className="intern-th">Time Out</div>
+                      <div className="intern-th">Duration</div>
+                      <div className="intern-th">Actions</div>
                     </div>
                     <div className="intern-rows">
                       {(() => {
                         const filteredLogs = selectedMonth === 'all' ? attendanceLogs : attendanceLogs.filter(l => l.date?.startsWith(selectedMonth))
                         if (filteredLogs.length === 0) return <div style={{ padding: '48px 24px', textAlign: 'center', color: 'var(--muted)', fontSize: '0.8rem' }}>No records found.</div>
                         return filteredLogs.map((log, i) => {
-                          const f = formatLog(log)
+                          const f           = formatLog(log)
+                          const incomplete  = log.timeIn && !log.timeOut
+                          const isOvertime  = (() => {
+                            if (!log.timeIn || !log.timeOut || !log.shift) return false
+                            const shiftCfg  = shiftSettings[log.shift]
+                            if (!shiftCfg) return false
+                            const timeOutD  = log.timeOut.toDate()
+                            const [eh, em]  = shiftCfg.end.split(':').map(Number)
+                            const shiftEnd  = new Date(timeOutD)
+                            shiftEnd.setHours(eh, em, 0, 0)
+                            // For GY shift end is next day
+                            if (log.shift === 'gy' && eh < 12) shiftEnd.setDate(shiftEnd.getDate() + 1)
+                            return timeOutD > shiftEnd
+                          })()
                           return (
-                            <div className="intern-row" key={i} style={{ gridTemplateColumns: '1.2fr 1fr 1fr 0.8fr' }}>
-                              <div className="intern-td" style={{ fontFamily: 'var(--font-display)', fontWeight: 600 }}>{f.date}</div>
+                            <div className={`intern-row ${incomplete ? 'row-incomplete' : ''}`} key={i} style={{ gridTemplateColumns: '1.2fr 1fr 1fr 0.8fr 0.6fr' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <span className="intern-td" style={{ fontFamily: 'var(--font-display)', fontWeight: 600 }}>{f.date}</span>
+                                {incomplete && <span className="att-flag">⚠️ No time out</span>}
+                              </div>
                               <div className="intern-td" style={{ color: 'var(--accent)' }}>↓ {f.timeIn}</div>
-                              <div className="intern-td" style={{ color: 'var(--accent2)' }}>↑ {f.timeOut}</div>
-                              <div className="intern-td muted">{f.duration}</div>
+                              <div className="intern-td" style={{ color: incomplete ? '#f59e0b' : 'var(--accent2)' }}>
+                                {incomplete ? '— missing' : `↑ ${f.timeOut}`}
+                              </div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <span className="intern-td muted">{f.duration}</span>
+                                {isOvertime && <span className="att-overtime">⏱ OT</span>}
+                              </div>
+                              <div>
+                                <button
+                                  className="btn-icon"
+                                  onClick={() => setEditingLog({ log, internUid: viewingAttendance.uid })}
+                                >✎ Edit</button>
+                              </div>
                             </div>
                           )
                         })
@@ -600,6 +889,17 @@ export default function AdminDashboard({ user, onLogout }) {
                   </div>
                 )}
               </div>
+            )}
+
+            {/* ── SETTINGS TAB ── */}
+            {tab === 'settings' && (
+              <SettingsTab
+                shiftSettings={shiftSettings}
+                onSave={async (updated) => {
+                  await saveShiftSettings(updated)
+                  setShiftSettings(updated)
+                }}
+              />
             )}
           </>
         )}

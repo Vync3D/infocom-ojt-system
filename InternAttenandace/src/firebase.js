@@ -19,6 +19,7 @@ import {
   orderBy,
   getDocs,
   serverTimestamp,
+  Timestamp,
 } from "firebase/firestore"
 
 // ── Config ──
@@ -195,9 +196,10 @@ export async function timeIn(uid, shift = 'morning') {
   const lateTime = new Date(now); lateTime.setHours(lh, lm, 0, 0)
   const status   = now > lateTime ? 'late' : 'complete'
 
+  // Use Timestamp.fromDate instead of serverTimestamp() so timeIn is immediately readable
   await setDoc(docRef, {
     uid, date: today, shift,
-    timeIn: serverTimestamp(),
+    timeIn: Timestamp.fromDate(now),
     timeOut: null, duration: null, status,
   })
   return { date: today, status }
@@ -222,7 +224,10 @@ export async function timeOut(uid, shift = 'morning') {
   if (!snap.exists()) throw new Error("No time-in record found for today.")
 
   // 3. Calculate duration
-  const data       = snap.data()
+  const data = snap.data()
+  if (data.timeOut) throw new Error("Already timed out today.")
+  if (!data.timeIn) throw new Error("Time-in record is incomplete. Please contact admin.")
+
   const timeInDate = data.timeIn.toDate()
   const now        = new Date()
   const diffMs     = now - timeInDate
@@ -337,4 +342,32 @@ export async function getShiftSettings() {
 
 export async function saveShiftSettings(settings) {
   await setDoc(doc(db, 'settings', 'shifts'), settings)
+}
+
+// Admin: manually edit time in and/or time out for a record
+export async function editAttendanceRecord(uid, date, timeInDate, timeOutDate) {
+  const docRef   = doc(db, 'attendance', `${uid}_${date}`)
+  const snap     = await getDoc(docRef)
+  if (!snap.exists()) throw new Error('Record not found.')
+
+  const updates = { timeIn: Timestamp.fromDate(timeInDate) }
+
+  if (timeOutDate) {
+    const diffMs  = timeOutDate - timeInDate
+    const diffH   = Math.floor(diffMs / 3600000)
+    const diffM   = Math.floor((diffMs % 3600000) / 60000)
+    updates.timeOut  = Timestamp.fromDate(timeOutDate)
+    updates.duration = `${diffH}h ${diffM.toString().padStart(2, '0')}m`
+    // Recalculate hours: remove old duration, add new
+    const old = snap.data()
+    if (old.duration) {
+      const [oh, om] = old.duration.replace('h', '').replace('m', '').trim().split(/\s+/).map(Number)
+      await updateHours(uid, -(oh + om / 60))
+    }
+    await updateHours(uid, diffH + diffM / 60)
+  } else {
+    updates.timeOut  = null
+    updates.duration = null
+  }
+  await updateDoc(docRef, updates)
 }

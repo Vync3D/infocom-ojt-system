@@ -41,7 +41,7 @@ export default function StudentDashboard({ user, onLogout }) {
   const [loadingOut, setLoadingOut] = useState(false)
   const [error, setError]           = useState('')
 
-  const shift = user?.shift || 'day'
+  const shift = user?.shift || 'morning'
 
   useEffect(() => {
     if (!user?.uid) return
@@ -115,10 +115,32 @@ export default function StudentDashboard({ user, onLogout }) {
     'timed-out': 'Timed out. See you next shift!',
   }[timeState]
 
+  // Overtime indicator — show if timed in and past shift end time
+  const isOvertime = (() => {
+    if (timeState !== 'timed-in' || !timeInAt) return false
+    const shiftCfg = {
+      morning: '15:00', mid: '22:00', gy: '07:00'
+    }
+    const endStr = shiftCfg[shift] || '15:00'
+    const [eh, em] = endStr.split(':').map(Number)
+    const now2 = new Date()
+    // For GY shift end is early morning next day
+    if (shift === 'gy') return now2.getHours() >= 7 && now2.getHours() < 12
+    return now2.getHours() > eh || (now2.getHours() === eh && now2.getMinutes() >= em)
+  })()
+
   // Shift badge
-  const shiftBadge = shift === 'gy'
-    ? <span style={{ fontSize: '0.62rem', background: 'rgba(0,120,255,0.1)', color: 'var(--accent2)', border: '1px solid rgba(0,120,255,0.2)', padding: '2px 8px', borderRadius: '100px', letterSpacing: '0.08em', textTransform: 'uppercase' }}>GY Shift</span>
-    : <span style={{ fontSize: '0.62rem', background: 'rgba(0,229,160,0.08)', color: 'var(--accent)', border: '1px solid rgba(0,229,160,0.2)', padding: '2px 8px', borderRadius: '100px', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Day Shift</span>
+  const shiftConfig = {
+    morning: { label: '🌅 Morning Shift', bg: 'rgba(0,229,160,0.08)',   color: 'var(--accent)',  border: '1px solid rgba(0,229,160,0.2)' },
+    mid:     { label: '🌤️ Mid Shift',     bg: 'rgba(245,158,11,0.08)',  color: '#f59e0b',        border: '1px solid rgba(245,158,11,0.2)' },
+    gy:      { label: '🌙 GY Shift',      bg: 'rgba(0,120,255,0.08)',   color: 'var(--accent2)', border: '1px solid rgba(0,120,255,0.2)' },
+  }
+  const sc = shiftConfig[shift] || shiftConfig['morning']
+  const shiftBadge = (
+    <span style={{ fontSize: '0.62rem', background: sc.bg, color: sc.color, border: sc.border, padding: '2px 8px', borderRadius: '100px', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+      {sc.label}
+    </span>
+  )
 
   if (page === 'attendance') return <AttendancePage uid={user?.uid} onBack={() => setPage('dashboard')} />
   if (page === 'tasks')      return <TasksPage      uid={user?.uid} onBack={() => setPage('dashboard')} />
@@ -126,7 +148,7 @@ export default function StudentDashboard({ user, onLogout }) {
   return (
     <div className="dashboard">
       <header className="topbar">
-        <div className="topbar-logo">Track<span>OJT</span></div>
+        <div className="topbar-logo">Infocom<span>OJT</span></div>
         <div className="topbar-right">
           <span className="topbar-greeting">Hello, <strong>{user?.name?.split(' ')[0] || 'Intern'}</strong></span>
           <button className="btn-logout" onClick={handleLogout}>⎋ Logout</button>
@@ -168,6 +190,11 @@ export default function StudentDashboard({ user, onLogout }) {
             </div>
 
             <div className={`time-status ${timeState}`}>{statusMessage}</div>
+            {isOvertime && (
+              <div style={{ margin: '0 24px 12px', padding: '8px 14px', background: 'rgba(168,85,247,0.08)', border: '1px solid rgba(168,85,247,0.2)', borderRadius: '8px', color: '#a855f7', fontSize: '0.75rem' }}>
+                ⏱ You are currently on <strong>overtime</strong>. Great dedication!
+              </div>
+            )}
 
             {/* Error — includes geofence errors */}
             {error && (

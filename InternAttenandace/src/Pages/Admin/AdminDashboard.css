@@ -653,3 +653,136 @@
   color: var(--accent);
   border-color: var(--accent);
 }
+
+/* ── CREDENTIALS BOX (after intern created) ── */
+.credentials-box {
+  background: rgba(0,0,0,0.3);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.credential-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  gap: 12px;
+}
+.credential-row:last-child { border-bottom: none; }
+.credential-label {
+  font-size: 0.65rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  flex-shrink: 0;
+}
+.credential-value {
+  font-size: 0.83rem;
+  color: var(--text);
+  text-align: right;
+  word-break: break-all;
+}
+.credential-password {
+  font-family: var(--font-display);
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: var(--accent);
+  letter-spacing: 0.15em;
+}
+
+/* ── SETTINGS TAB ── */
+.settings-body {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+.settings-desc {
+  font-size: 0.75rem;
+  color: var(--muted);
+  line-height: 1.6;
+}
+.shift-settings-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+@media (max-width: 900px) {
+  .shift-settings-grid { grid-template-columns: 1fr; }
+}
+.shift-setting-card {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.shift-setting-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.shift-setting-icon { font-size: 1.4rem; }
+.shift-setting-name {
+  font-family: var(--font-display);
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+.shift-setting-sub {
+  font-size: 0.68rem;
+  color: var(--accent);
+  margin-top: 2px;
+}
+.shift-setting-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.shift-field label {
+  display: block;
+  font-size: 0.62rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 4px;
+}
+.shift-field input {
+  width: 100%;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  outline: none;
+  transition: border-color 0.2s;
+}
+.shift-field input:focus { border-color: var(--accent2); }
+
+/* ── ATTENDANCE FLAGS ── */
+.row-incomplete {
+  background: rgba(245,158,11,0.04) !important;
+  border-left: 2px solid rgba(245,158,11,0.4);
+}
+.att-flag {
+  font-size: 0.62rem;
+  color: #f59e0b;
+  background: rgba(245,158,11,0.08);
+  border: 1px solid rgba(245,158,11,0.2);
+  padding: 2px 7px;
+  border-radius: 100px;
+  white-space: nowrap;
+}
+.att-overtime {
+  font-size: 0.62rem;
+  color: #a855f7;
+  background: rgba(168,85,247,0.08);
+  border: 1px solid rgba(168,85,247,0.2);
+  padding: 2px 7px;
+  border-radius: 100px;
+  white-space: nowrap;
+}
