@@ -133,7 +133,7 @@
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 12px;
-  overflow: hidden;
+  overflow: visible;
   animation: fadeUp 0.4s ease 0.1s both;
 }
 .admin-card-header {
@@ -601,4 +601,55 @@
   font-size: 0.68rem;
   color: var(--accent);
   margin-top: 1px;
+}
+
+/* ── MEMBER HOVER TOOLTIP ── */
+.member-avatars-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.members-tooltip {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 8px);
+  min-width: 230px;
+  background: #16191f;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px;
+  box-shadow: 0 16px 40px rgba(0,0,0,0.6);
+  z-index: 9999;
+  pointer-events: none;
+}
+
+.members-tooltip::after {
+  content: '';
+  position: absolute;
+  bottom: -6px;
+  left: 20px;
+  width: 10px;
+  height: 10px;
+  background: #16191f;
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  transform: rotate(45deg);
+}
+
+/* ── PRESENT NOW REFRESH BUTTON ── */
+.present-refresh-btn {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  border-radius: 6px;
+  padding: 2px 7px;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  transition: all 0.2s;
+  cursor: pointer;
+}
+.present-refresh-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
 }

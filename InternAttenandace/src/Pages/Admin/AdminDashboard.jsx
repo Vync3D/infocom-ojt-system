@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import './AdminDashboard.css'
 import {
   getAllInterns, addIntern, removeIntern,
-  getAllTasks, assignTask, assignGroupTask,
+  getAllTasks, assignTask, assignGroupTask, deleteTask,
   getAttendanceLogs, getTodayAttendance, logoutUser, updateInternShift
 } from '../../firebase'
 
@@ -206,16 +206,18 @@ function AssignGroupModal({ interns, onAssign, onCancel }) {
 // ── Main Component ──
 export default function AdminDashboard({ user, onLogout }) {
   const [tab, setTab]             = useState('interns')
-  const [taskTab, setTaskTab]     = useState('solo')  // 'solo' | 'group'
+  const [taskTab, setTaskTab]     = useState('solo')
   const [interns, setInterns]     = useState([])
   const [tasks, setTasks]         = useState([])
   const [modal, setModal]         = useState(null)
   const [selectedIntern, setSelectedIntern]       = useState(null)
+  const [selectedTask, setSelectedTask]           = useState(null)
   const [viewingAttendance, setViewingAttendance] = useState(null)
   const [attendanceLogs, setAttendanceLogs]       = useState([])
   const [loadingData, setLoadingData]             = useState(true)
   const [todayAttendance, setTodayAttendance]     = useState([])
   const [selectedMonth, setSelectedMonth]         = useState('all')
+  const [hoveredTaskId, setHoveredTaskId]         = useState(null)
 
   useEffect(() => {
     Promise.all([getAllInterns(), getAllTasks(), getTodayAttendance()])
@@ -251,6 +253,12 @@ export default function AdminDashboard({ user, onLogout }) {
     setTasks(await getAllTasks()); setModal(null)
   }
 
+  const handleDeleteTask = async () => {
+    await deleteTask(selectedTask.id)
+    setTasks(prev => prev.filter(t => t.id !== selectedTask.id))
+    setModal(null); setSelectedTask(null)
+  }
+
   const handleLogout = async () => { await logoutUser(); onLogout() }
 
   const presentCount = todayAttendance.filter(a => a.timeIn && !a.timeOut).length
@@ -263,10 +271,20 @@ export default function AdminDashboard({ user, onLogout }) {
       {modal === 'assign-solo'  && <AssignSoloModal  interns={interns} onAssign={handleAssignSolo}  onCancel={() => setModal(null)} />}
       {modal === 'assign-group' && <AssignGroupModal interns={interns} onAssign={handleAssignGroup} onCancel={() => setModal(null)} />}
       {modal === 'confirm-remove' && <ConfirmModal name={selectedIntern?.name} onConfirm={handleRemoveIntern} onCancel={() => setModal(null)} />}
+      {modal === 'confirm-delete-task' && (
+        <div className="modal-overlay"><div className="modal">
+          <div className="modal-title">Delete Task</div>
+          <div className="modal-sub">Are you sure you want to delete <strong>"{selectedTask?.title}"</strong>? This cannot be undone.</div>
+          <div className="modal-actions">
+            <button className="btn-modal-cancel" onClick={() => { setModal(null); setSelectedTask(null) }}>Cancel</button>
+            <button className="btn-modal-confirm" style={{ background: '#ff5f57' }} onClick={handleDeleteTask}>Delete</button>
+          </div>
+        </div></div>
+      )}
 
       <header className="admin-topbar">
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div className="admin-topbar-logo">Track<span>OJT</span></div>
+          <div className="admin-topbar-logo">Infocom<span>OJT</span></div>
           <span className="admin-role-badge">Admin</span>
         </div>
         <div className="admin-topbar-right">
@@ -282,7 +300,14 @@ export default function AdminDashboard({ user, onLogout }) {
 
           {/* Present Now — hoverable */}
           <div className="admin-stat-card present-now-card">
-            <div className="admin-stat-label">Present Now</div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div className="admin-stat-label">Present Now</div>
+              <button
+                className="present-refresh-btn"
+                onClick={async (e) => { e.stopPropagation(); setTodayAttendance(await getTodayAttendance()) }}
+                title="Refresh"
+              >↺</button>
+            </div>
             <div className="admin-stat-value green">{presentCount}</div>
             {/* Tooltip */}
             <div className="present-tooltip">
@@ -402,19 +427,20 @@ export default function AdminDashboard({ user, onLogout }) {
                 {/* SOLO tasks list */}
                 {taskTab === 'solo' && (
                   <>
-                    <div className="intern-table-header" style={{ gridTemplateColumns: '1.5fr 1.2fr 0.8fr 0.8fr 0.8fr' }}>
+                    <div className="intern-table-header" style={{ gridTemplateColumns: '1.5fr 1.2fr 0.8fr 0.8fr 0.8fr 0.5fr' }}>
                       <div className="intern-th">Task</div>
                       <div className="intern-th">Intern</div>
                       <div className="intern-th">Priority</div>
                       <div className="intern-th">Status</div>
                       <div className="intern-th">Assigned By</div>
+                      <div className="intern-th"></div>
                     </div>
                     <div className="intern-rows">
                       {soloTasks.length === 0 && <div style={{ padding: '48px 24px', textAlign: 'center', color: 'var(--muted)', fontSize: '0.8rem' }}>No solo tasks yet.</div>}
                       {soloTasks.map(task => {
                         const intern = interns.find(i => i.uid === task.internUid)
                         return (
-                          <div className="intern-row" key={task.id} style={{ gridTemplateColumns: '1.5fr 1.2fr 0.8fr 0.8fr 0.8fr' }}>
+                          <div className="intern-row" key={task.id} style={{ gridTemplateColumns: '1.5fr 1.2fr 0.8fr 0.8fr 0.8fr 0.5fr' }}>
                             <div>
                               <div className="intern-name" style={{ fontSize: '0.85rem' }}>{task.title}</div>
                               {task.desc && <div className="intern-email">{task.desc.slice(0, 50)}{task.desc.length > 50 ? '...' : ''}</div>}
@@ -426,6 +452,9 @@ export default function AdminDashboard({ user, onLogout }) {
                             <div><span className={`priority-tag ${task.priority}`}>{PRIORITY_LABELS[task.priority]}</span></div>
                             <div><span className={`status-tag ${task.status}`}>{STATUS_LABELS[task.status]}</span></div>
                             <div className="intern-td muted">{task.assignedBy}</div>
+                            <div>
+                              <button className="btn-icon danger" onClick={() => { setSelectedTask(task); setModal('confirm-delete-task') }}>✕</button>
+                            </div>
                           </div>
                         )
                       })}
@@ -436,11 +465,12 @@ export default function AdminDashboard({ user, onLogout }) {
                 {/* GROUP tasks list */}
                 {taskTab === 'group' && (
                   <>
-                    <div className="intern-table-header" style={{ gridTemplateColumns: '1.5fr 1.2fr 0.8fr 0.8fr' }}>
+                    <div className="intern-table-header" style={{ gridTemplateColumns: '1.5fr 1.2fr 1fr 0.8fr 0.5fr' }}>
                       <div className="intern-th">Task</div>
                       <div className="intern-th">Leader</div>
                       <div className="intern-th">Members</div>
                       <div className="intern-th">Status</div>
+                      <div className="intern-th"></div>
                     </div>
                     <div className="intern-rows">
                       {groupTasks.length === 0 && <div style={{ padding: '48px 24px', textAlign: 'center', color: 'var(--muted)', fontSize: '0.8rem' }}>No group tasks yet.</div>}
@@ -448,7 +478,7 @@ export default function AdminDashboard({ user, onLogout }) {
                         const leader  = interns.find(i => i.uid === task.leaderUid)
                         const members = (task.memberUids || []).map(uid => interns.find(i => i.uid === uid)).filter(Boolean)
                         return (
-                          <div className="intern-row" key={task.id} style={{ gridTemplateColumns: '1.5fr 1.2fr 0.8fr 0.8fr' }}>
+                          <div className="intern-row" key={task.id} style={{ gridTemplateColumns: '1.5fr 1.2fr 1fr 0.8fr 0.5fr' }}>
                             <div>
                               <div className="intern-name" style={{ fontSize: '0.85rem' }}>{task.title}</div>
                               {task.desc && <div className="intern-email">{task.desc.slice(0, 50)}{task.desc.length > 50 ? '...' : ''}</div>}
@@ -461,17 +491,41 @@ export default function AdminDashboard({ user, onLogout }) {
                                 <div className="intern-email">Leader</div>
                               </div>
                             </div>
-                            {/* Member avatars stack */}
-                            <div className="member-avatars">
-                              {members.slice(0, 4).map((m, idx) => (
-                                <div key={m.uid} className="member-avatar-stack" style={{ zIndex: 10 - idx }} title={m.name}>
-                                  {getInitials(m.name)}
+                            {/* Member avatars with hover tooltip */}
+                            <div
+                              className="member-avatars-wrap"
+                              onMouseEnter={() => setHoveredTaskId(task.id)}
+                              onMouseLeave={() => setHoveredTaskId(null)}
+                            >
+                              <div className="member-avatars">
+                                {members.slice(0, 4).map((m, idx) => (
+                                  <div key={m.uid} className="member-avatar-stack" style={{ zIndex: 10 - idx }}>{getInitials(m.name)}</div>
+                                ))}
+                                {members.length > 4 && <div className="member-avatar-stack more">+{members.length - 4}</div>}
+                                <span className="intern-td" style={{ marginLeft: 8 }}>{members.length}</span>
+                              </div>
+                              {hoveredTaskId === task.id && (
+                                <div className="members-tooltip">
+                                  <div className="present-tooltip-title">Group Members</div>
+                                  {members.map(m => (
+                                    <div className="present-tooltip-row" key={m.uid}>
+                                      <div className="present-tooltip-avatar">{getInitials(m.name)}</div>
+                                      <div>
+                                        <div className="present-tooltip-name">
+                                          {m.name}
+                                          {m.uid === task.leaderUid && <span style={{ color: 'var(--accent)', fontSize: '0.6rem', marginLeft: 6 }}>👑 Leader</span>}
+                                        </div>
+                                        <div className="present-tooltip-time">{m.email}</div>
+                                      </div>
+                                    </div>
+                                  ))}
                                 </div>
-                              ))}
-                              {members.length > 4 && <div className="member-avatar-stack more">+{members.length - 4}</div>}
-                              <span className="intern-td" style={{ marginLeft: 8 }}>{members.length}</span>
+                              )}
                             </div>
                             <div><span className={`status-tag ${task.status}`}>{STATUS_LABELS[task.status]}</span></div>
+                            <div>
+                              <button className="btn-icon danger" onClick={() => { setSelectedTask(task); setModal('confirm-delete-task') }}>✕</button>
+                            </div>
                           </div>
                         )
                       })}

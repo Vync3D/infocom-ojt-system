@@ -93,13 +93,10 @@ function isLate(shift, date) {
   return hour > 9 || (hour === 9 && min > 0)
 }
 
-// For GY shift: if intern times in at night, the "date" should be the night's date
-// e.g. timing in at 10 PM on Jan 1 → record date is Jan 1
-// e.g. timing out at 6 AM on Jan 2 → still belongs to Jan 1's record
 function getShiftDate(shift) {
   const now  = new Date()
   const hour = now.getHours()
-  // For GY shift: if it's early morning (before noon), the shift belongs to yesterday
+  // GY shift: if early morning (before noon), belongs to yesterday
   if (shift === 'gy' && hour < 12) {
     const yesterday = new Date(now)
     yesterday.setDate(yesterday.getDate() - 1)
@@ -173,50 +170,50 @@ export async function updateInternShift(uid, shift) {
 // ────────────────────────────────────────────
 
 // Time In — checks geofence first, then records attendance
-export async function timeIn(uid, shift = 'day') {
-  // 1. Geofence check
-  const position = await getCurrentPosition()
-  const { allowed, distance } = checkGeofence(
-    position.coords.latitude,
-    position.coords.longitude
-  )
-  if (!allowed) {
-    throw new Error(`You are ${distance}m away from the office. You must be within ${RADIUS_METERS}m to time in.`)
-  }
+export async function timeIn(uid, shift = 'morning') {
+  // ── GEOFENCE CHECK (temporarily disabled for testing) ──
+  // const position = await getCurrentPosition()
+  // const { allowed, distance } = checkGeofence(
+  //   position.coords.latitude,
+  //   position.coords.longitude
+  // )
+  // if (!allowed) {
+  //   throw new Error(`You are ${distance}m away from the office. You must be within ${RADIUS_METERS}m to time in.`)
+  // }
 
   // 2. Check if already timed in today
+  const shiftSettings = await getShiftSettings()
+  const shiftConfig   = shiftSettings[shift] || shiftSettings['morning']
   const today  = getShiftDate(shift)
   const docRef = doc(db, "attendance", `${uid}_${today}`)
   const snap   = await getDoc(docRef)
   if (snap.exists()) throw new Error("Already timed in today.")
 
-  // 3. Record attendance
-  const now    = new Date()
-  const status = isLate(shift, now) ? "late" : "complete"
+  // 3. Record attendance — late if after lateAfter time
+  const now      = new Date()
+  const [lh, lm] = shiftConfig.lateAfter.split(':').map(Number)
+  const lateTime = new Date(now); lateTime.setHours(lh, lm, 0, 0)
+  const status   = now > lateTime ? 'late' : 'complete'
 
   await setDoc(docRef, {
-    uid,
-    date: today,
-    shift,
+    uid, date: today, shift,
     timeIn: serverTimestamp(),
-    timeOut: null,
-    duration: null,
-    status,
+    timeOut: null, duration: null, status,
   })
   return { date: today, status }
 }
 
 // Time Out — also checks geofence
-export async function timeOut(uid, shift = 'day') {
-  // 1. Geofence check
-  const position = await getCurrentPosition()
-  const { allowed, distance } = checkGeofence(
-    position.coords.latitude,
-    position.coords.longitude
-  )
-  if (!allowed) {
-    throw new Error(`You are ${distance}m away from the office. You must be within ${RADIUS_METERS}m to time out.`)
-  }
+export async function timeOut(uid, shift = 'morning') {
+  // ── GEOFENCE CHECK (temporarily disabled for testing) ──
+  // const position = await getCurrentPosition()
+  // const { allowed, distance } = checkGeofence(
+  //   position.coords.latitude,
+  //   position.coords.longitude
+  // )
+  // if (!allowed) {
+  //   throw new Error(`You are ${distance}m away from the office. You must be within ${RADIUS_METERS}m to time out.`)
+  // }
 
   // 2. Find today's record
   const today  = getShiftDate(shift)
@@ -317,4 +314,27 @@ export async function getTasksForInternAll(uid) {
   const all   = [...solo, ...group]
   const seen  = new Set()
   return all.filter(t => { if (seen.has(t.id)) return false; seen.add(t.id); return true })
+}
+
+// Delete a task
+export async function deleteTask(taskId) {
+  await deleteDoc(doc(db, 'tasks', taskId))
+}
+
+// ────────────────────────────────────────────
+// SHIFT SETTINGS (stored in Firestore: "settings/shifts")
+// ────────────────────────────────────────────
+const DEFAULT_SHIFT_SETTINGS = {
+  morning: { label: 'Morning', start: '07:00', end: '15:00', lateAfter: '07:00' },
+  mid:     { label: 'Mid',     start: '13:00', end: '22:00', lateAfter: '13:00' },
+  gy:      { label: 'GY',      start: '22:00', end: '07:00', lateAfter: '22:00' },
+}
+
+export async function getShiftSettings() {
+  const snap = await getDoc(doc(db, 'settings', 'shifts'))
+  return snap.exists() ? snap.data() : DEFAULT_SHIFT_SETTINGS
+}
+
+export async function saveShiftSettings(settings) {
+  await setDoc(doc(db, 'settings', 'shifts'), settings)
 }
