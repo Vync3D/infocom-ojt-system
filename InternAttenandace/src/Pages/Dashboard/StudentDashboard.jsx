@@ -246,7 +246,7 @@ export default function StudentDashboard({ user, onLogout }) {
         {/* Profile Banner */}
         <div className="profile-banner">
           <div className="profile-left">
-            <div className="avatar">{getInitials(user?.name)}</div>
+            <div className="avatar" style={user?.avatarColor ? { background: user.avatarColor + '22', border: `2px solid ${user.avatarColor}55`, color: user.avatarColor } : {}}>{getInitials(user?.name)}</div>
             <div>
               <div className="profile-name">{user?.name || 'Intern'}</div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>

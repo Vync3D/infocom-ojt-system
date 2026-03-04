@@ -12,6 +12,14 @@ import {
 function getInitials(name) {
   return name?.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || '??'
 }
+function avatarStyle(color) {
+  if (!color) return {}
+  return {
+    background: color + '22',
+    border: `1.5px solid ${color}55`,
+    color: color,
+  }
+}
 function getAvailableMonths(logs) {
   const months = [...new Set(logs.map(l => l.date?.slice(0, 7)).filter(Boolean))]
   return months.sort((a, b) => b.localeCompare(a))
@@ -691,7 +699,10 @@ export default function AdminDashboard({ user, onLogout }) {
   const [selectedMonth, setSelectedMonth]         = useState('all')
   const [hoveredTaskId, setHoveredTaskId]         = useState(null)
   const [internShiftFilter, setInternShiftFilter] = useState('all')
-  const [editingLog, setEditingLog]               = useState(null) // { log, internUid }
+  const [editingLog, setEditingLog]               = useState(null)
+  const [allLogs, setAllLogs]                     = useState([])
+  const [allLogsLoading, setAllLogsLoading]       = useState(false)
+  const [allLogsMonth, setAllLogsMonth]           = useState('all') // { log, internUid }
   const [shiftSettings, setShiftSettings]         = useState({
     morning: { label: 'Morning', start: '07:00', end: '15:00', lateAfter: '07:00' },
     mid:     { label: 'Mid',     start: '13:00', end: '22:00', lateAfter: '13:00' },
@@ -710,6 +721,16 @@ export default function AdminDashboard({ user, onLogout }) {
     setSelectedMonth('all')
     getAttendanceLogs(viewingAttendance.uid).then(setAttendanceLogs).catch(console.error)
   }, [viewingAttendance])
+
+  // Load all attendance logs when attendance tab is opened
+  useEffect(() => {
+    if (tab !== 'attendance' || viewingAttendance) return
+    setAllLogsLoading(true)
+    getAllAttendanceInRange('2000-01-01', '2099-12-31')
+      .then(setAllLogs)
+      .catch(console.error)
+      .finally(() => setAllLogsLoading(false))
+  }, [tab, viewingAttendance])
 
   const handleAddIntern = async (form) => {
     await addIntern(form.email, form.password, form.name, parseInt(form.hoursRequired), form.shift)
@@ -826,7 +847,7 @@ export default function AdminDashboard({ user, onLogout }) {
                       : '—'
                     return (
                       <div className="present-tooltip-row" key={a.uid}>
-                        <div className="present-tooltip-avatar">{getInitials(intern?.name)}</div>
+                        <div className="present-tooltip-avatar" style={avatarStyle(intern?.avatarColor)}>{getInitials(intern?.name)}</div>
                         <div>
                           <div className="present-tooltip-name">{intern?.name || 'Unknown'}</div>
                           <div className="present-tooltip-time">↓ Timed in at {timeInStr}</div>
@@ -900,7 +921,7 @@ export default function AdminDashboard({ user, onLogout }) {
                     return (
                       <div className="intern-row" key={intern.uid}>
                         <div className="intern-name-cell">
-                          <div className="intern-avatar">{getInitials(intern.name)}</div>
+                          <div className="intern-avatar" style={avatarStyle(intern.avatarColor)}>{getInitials(intern.name)}</div>
                           <div>
                             <div className="intern-name">{intern.name}</div>
                             <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginTop: '2px' }}>
@@ -971,7 +992,7 @@ export default function AdminDashboard({ user, onLogout }) {
                               {task.desc && <div className="intern-email">{task.desc.slice(0, 50)}{task.desc.length > 50 ? '...' : ''}</div>}
                             </div>
                             <div className="intern-name-cell">
-                              <div className="intern-avatar" style={{ width: 28, height: 28, fontSize: '0.65rem' }}>{getInitials(intern?.name)}</div>
+                              <div className="intern-avatar" style={{ width: 28, height: 28, fontSize: '0.65rem', ...avatarStyle(intern?.avatarColor) }}>{getInitials(intern?.name)}</div>
                               <span className="intern-td">{intern?.name || 'Unknown'}</span>
                             </div>
                             <div><span className={`priority-tag ${task.priority}`}>{PRIORITY_LABELS[task.priority]}</span></div>
@@ -1010,7 +1031,7 @@ export default function AdminDashboard({ user, onLogout }) {
                               <span className={`priority-tag ${task.priority}`} style={{ marginTop: 6, display: 'inline-block' }}>{PRIORITY_LABELS[task.priority]}</span>
                             </div>
                             <div className="intern-name-cell">
-                              <div className="intern-avatar" style={{ width: 28, height: 28, fontSize: '0.65rem' }}>{getInitials(leader?.name)}</div>
+                              <div className="intern-avatar" style={{ width: 28, height: 28, fontSize: '0.65rem', ...avatarStyle(leader?.avatarColor) }}>{getInitials(leader?.name)}</div>
                               <div>
                                 <div className="intern-td">{leader?.name || 'Unknown'}</div>
                                 <div className="intern-email">Leader</div>
@@ -1024,7 +1045,7 @@ export default function AdminDashboard({ user, onLogout }) {
                             >
                               <div className="member-avatars">
                                 {members.slice(0, 4).map((m, idx) => (
-                                  <div key={m.uid} className="member-avatar-stack" style={{ zIndex: 10 - idx }}>{getInitials(m.name)}</div>
+                                  <div key={m.uid} className="member-avatar-stack" style={{ zIndex: 10 - idx, ...avatarStyle(m.avatarColor) }}>{getInitials(m.name)}</div>
                                 ))}
                                 {members.length > 4 && <div className="member-avatar-stack more">+{members.length - 4}</div>}
                                 <span className="intern-td" style={{ marginLeft: 8 }}>{members.length}</span>
@@ -1034,7 +1055,7 @@ export default function AdminDashboard({ user, onLogout }) {
                                   <div className="present-tooltip-title">Group Members</div>
                                   {members.map(m => (
                                     <div className="present-tooltip-row" key={m.uid}>
-                                      <div className="present-tooltip-avatar">{getInitials(m.name)}</div>
+                                      <div className="present-tooltip-avatar" style={avatarStyle(m.avatarColor)}>{getInitials(m.name)}</div>
                                       <div>
                                         <div className="present-tooltip-name">
                                           {m.name}
@@ -1091,69 +1112,117 @@ export default function AdminDashboard({ user, onLogout }) {
                   </div>
                 </div>
 
-                {/* ── DEFAULT: All interns overview ── */}
-                {!viewingAttendance && (
-                  <>
-                    <div className="intern-table-header" style={{ gridTemplateColumns: '1.8fr 0.9fr 1fr 1fr 1fr' }}>
-                      <div className="intern-th">Intern</div>
-                      <div className="intern-th">Shift</div>
-                      <div className="intern-th">Today Status</div>
-                      <div className="intern-th">Time In</div>
-                      <div className="intern-th">Time Out</div>
-                    </div>
-                    <div className="intern-rows">
-                      {interns.length === 0 && (
-                        <div style={{ padding: '48px 24px', textAlign: 'center', color: 'var(--muted)', fontSize: '0.8rem' }}>No interns yet.</div>
-                      )}
-                      {interns.map(intern => {
-                        const today   = new Date().toISOString().split('T')[0]
-                        const rec     = todayAttendance.find(a => a.uid === intern.uid)
-                        const timeIn  = rec?.timeIn?.toDate  ? rec.timeIn.toDate().toLocaleTimeString('en-US',  { hour: '2-digit', minute: '2-digit', hour12: true }) : '—'
-                        const timeOut = rec?.timeOut?.toDate ? rec.timeOut.toDate().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }) : '—'
-                        const status  = !rec ? 'not-in' : rec.timeOut ? 'timed-out' : 'timed-in'
-                        const shiftColors = {
-                          morning: { bg: 'rgba(0,229,160,0.08)',   color: 'var(--accent)',  border: '1px solid rgba(0,229,160,0.2)' },
-                          mid:     { bg: 'rgba(245,158,11,0.08)',  color: '#f59e0b',        border: '1px solid rgba(245,158,11,0.2)' },
-                          gy:      { bg: 'rgba(0,120,255,0.08)',   color: 'var(--accent2)', border: '1px solid rgba(0,120,255,0.2)' },
-                        }
-                        const sc = shiftColors[intern.shift] || shiftColors.morning
+                {/* ── DEFAULT: Chronological log grouped by day ── */}
+                {!viewingAttendance && (() => {
+                  const availMonths = [...new Set(allLogs.map(l => l.date?.slice(0,7)).filter(Boolean))].sort((a,b) => b.localeCompare(a))
+                  const filtered    = allLogsMonth === 'all' ? allLogs : allLogs.filter(l => l.date?.startsWith(allLogsMonth))
+
+                  // Group by date, sorted newest first
+                  const byDate = {}
+                  filtered.forEach(r => {
+                    if (!byDate[r.date]) byDate[r.date] = []
+                    byDate[r.date].push(r)
+                  })
+                  // Within each day, sort by timeIn ascending
+                  Object.keys(byDate).forEach(date => {
+                    byDate[date].sort((a, b) => {
+                      const at = a.timeIn?.toDate?.()?.getTime() || 0
+                      const bt = b.timeIn?.toDate?.()?.getTime() || 0
+                      return at - bt
+                    })
+                  })
+                  const sortedDates = Object.keys(byDate).sort((a,b) => b.localeCompare(a))
+
+                  return (
+                    <>
+                      {/* Month filter for all-logs view */}
+                      <div style={{ padding: '12px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <span style={{ fontSize: '0.72rem', color: 'var(--muted)' }}>📅 Month:</span>
+                        <select className="assign-select" value={allLogsMonth} onChange={e => setAllLogsMonth(e.target.value)}>
+                          <option value="all">All Time</option>
+                          {availMonths.map(m => <option key={m} value={m}>{monthLabel(m)}</option>)}
+                        </select>
+                        <span style={{ fontSize: '0.7rem', color: 'var(--muted)', marginLeft: 'auto' }}>
+                          Click any intern to view their full history
+                        </span>
+                      </div>
+
+                      {allLogsLoading ? (
+                        <div style={{ padding: '48px 24px', textAlign: 'center', color: 'var(--muted)', fontSize: '0.8rem' }}>Loading records...</div>
+                      ) : sortedDates.length === 0 ? (
+                        <div style={{ padding: '48px 24px', textAlign: 'center', color: 'var(--muted)', fontSize: '0.8rem' }}>No attendance records found.</div>
+                      ) : sortedDates.map(date => {
+                        const dateLabel = new Date(date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
+                        const dayRecs   = byDate[date]
                         return (
-                          <div className="intern-row" key={intern.uid}
-                            style={{ gridTemplateColumns: '1.8fr 0.9fr 1fr 1fr 1fr', cursor: 'pointer' }}
-                            onClick={() => setViewingAttendance(intern)}
-                          >
-                            <div className="intern-name-cell">
-                              <div className="intern-avatar">{getInitials(intern.name)}</div>
-                              <div>
-                                <div className="intern-name">{intern.name}</div>
-                                <div className="intern-email">{intern.email}</div>
-                              </div>
+                          <div key={date}>
+                            {/* Day header */}
+                            <div className="att-day-header">
+                              <span className="att-day-label">{dateLabel}</span>
+                              <span className="att-day-count">{dayRecs.length} record{dayRecs.length !== 1 ? 's' : ''}</span>
                             </div>
-                            <div>
-                              <span style={{ fontSize: '0.65rem', padding: '2px 8px', borderRadius: '100px', textTransform: 'uppercase', letterSpacing: '0.07em', fontWeight: 600, background: sc.bg, color: sc.color, border: sc.border }}>
-                                {intern.shift === 'gy' ? '🌙 GY' : intern.shift === 'mid' ? '🌤️ Mid' : '🌅 Morning'}
-                              </span>
+                            {/* Column header (only on first date) */}
+                            <div className="intern-table-header" style={{ gridTemplateColumns: '1.6fr 0.7fr 1fr 1fr 0.9fr 0.6fr' }}>
+                              <div className="intern-th">Intern</div>
+                              <div className="intern-th">Shift</div>
+                              <div className="intern-th">Time In</div>
+                              <div className="intern-th">Time Out</div>
+                              <div className="intern-th">Duration</div>
+                              <div className="intern-th">Status</div>
                             </div>
-                            <div>
-                              {status === 'timed-in'  && <span className="att-status-badge in">● Timed In</span>}
-                              {status === 'timed-out' && <span className="att-status-badge out">✓ Done</span>}
-                              {status === 'not-in'    && <span className="att-status-badge absent">○ Not In</span>}
-                            </div>
-                            <div className="intern-td" style={{ color: 'var(--accent)' }}>{rec ? `↓ ${timeIn}` : '—'}</div>
-                            <div className="intern-td" style={{ color: 'var(--accent2)' }}>{rec?.timeOut ? `↑ ${timeOut}` : '—'}</div>
+                            {dayRecs.map((rec, i) => {
+                              const intern     = interns.find(x => x.uid === rec.uid)
+                              const timeInStr  = rec.timeIn?.toDate  ? rec.timeIn.toDate().toLocaleTimeString('en-US',  { hour: '2-digit', minute: '2-digit', hour12: true }) : '—'
+                              const timeOutStr = rec.timeOut?.toDate ? rec.timeOut.toDate().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }) : '—'
+                              const incomplete = rec.timeIn && !rec.timeOut
+                              const shiftColors = { morning: { bg: 'rgba(0,229,160,0.08)', color: 'var(--accent)', border: '1px solid rgba(0,229,160,0.2)' }, mid: { bg: 'rgba(245,158,11,0.08)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.2)' }, gy: { bg: 'rgba(0,120,255,0.08)', color: 'var(--accent2)', border: '1px solid rgba(0,120,255,0.2)' } }
+                              const sc         = shiftColors[rec.shift] || shiftColors.morning
+                              return (
+                                <div key={i} className={`intern-row ${incomplete ? 'row-incomplete' : ''}`}
+                                  style={{ gridTemplateColumns: '1.6fr 0.7fr 1fr 1fr 0.9fr 0.6fr', cursor: 'pointer' }}
+                                  onClick={() => setViewingAttendance(intern)}
+                                >
+                                  <div className="intern-name-cell">
+                                    <div className="intern-avatar" style={{ width: 30, height: 30, fontSize: '0.65rem', ...avatarStyle(intern?.avatarColor) }}>{getInitials(intern?.name)}</div>
+                                    <div>
+                                      <div className="intern-name" style={{ fontSize: '0.83rem' }}>{intern?.name || 'Unknown'}</div>
+                                      <div className="intern-email">{intern?.email || '—'}</div>
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <span style={{ fontSize: '0.6rem', padding: '2px 6px', borderRadius: '100px', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600, background: sc.bg, color: sc.color, border: sc.border }}>
+                                      {rec.shift === 'gy' ? '🌙 GY' : rec.shift === 'mid' ? '🌤️ Mid' : '🌅 AM'}
+                                    </span>
+                                  </div>
+                                  <div className="intern-td" style={{ color: 'var(--accent)' }}>↓ {timeInStr}</div>
+                                  <div className="intern-td" style={{ color: incomplete ? '#f59e0b' : 'var(--accent2)' }}>
+                                    {incomplete ? '— missing' : `↑ ${timeOutStr}`}
+                                  </div>
+                                  <div className="intern-td muted">{rec.duration || '—'}</div>
+                                  <div>
+                                    {incomplete
+                                      ? <span className="att-flag" style={{ fontSize: '0.6rem' }}>⚠️ No out</span>
+                                      : rec.status === 'late'
+                                        ? <span className="att-overtime" style={{ fontSize: '0.6rem', background: 'rgba(239,68,68,0.08)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.2)' }}>Late</span>
+                                        : <span className="att-status-badge out" style={{ fontSize: '0.6rem' }}>✓ Done</span>
+                                    }
+                                  </div>
+                                </div>
+                              )
+                            })}
                           </div>
                         )
                       })}
-                    </div>
-                  </>
-                )}
+                    </>
+                  )
+                })()}
 
                 {/* ── FILTERED: Specific intern detail ── */}
                 {viewingAttendance && (
                   <>
                     <div className="attendance-intern-header" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                       <button className="btn-icon" onClick={() => setViewingAttendance(null)} style={{ fontSize: '0.75rem' }}>← All</button>
-                      <div className="intern-avatar">{getInitials(viewingAttendance.name)}</div>
+                      <div className="intern-avatar" style={avatarStyle(viewingAttendance.avatarColor)}>{getInitials(viewingAttendance.name)}</div>
                       <div>
                         <div className="attendance-intern-name">{viewingAttendance.name}</div>
                         <div className="attendance-intern-sub">{viewingAttendance.email} · {Math.floor(viewingAttendance.hoursRendered || 0)} hrs rendered</div>

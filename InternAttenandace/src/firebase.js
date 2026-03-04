@@ -140,6 +140,22 @@ export async function changePassword(currentPassword, newPassword) {
   await updatePassword(user, newPassword)
 }
 
+// 24 vibrant/neon colors for intern avatars
+export const AVATAR_COLORS = [
+  '#06b6d4', '#8b5cf6', '#f97316', '#ec4899', '#10b981', '#f59e0b',
+  '#3b82f6', '#ef4444', '#84cc16', '#a855f7', '#14b8a6', '#fb923c',
+  '#e879f9', '#22d3ee', '#4ade80', '#fb7185', '#fbbf24', '#60a5fa',
+  '#c084fc', '#34d399', '#f472b6', '#38bdf8', '#a3e635', '#ff6b6b',
+]
+
+export function assignAvatarColor(uid, existingColors = []) {
+  // Pick least-used color from palette
+  const counts = {}
+  AVATAR_COLORS.forEach(c => { counts[c] = 0 })
+  existingColors.forEach(c => { if (counts[c] !== undefined) counts[c]++ })
+  return AVATAR_COLORS.reduce((a, b) => counts[a] <= counts[b] ? a : b)
+}
+
 // ────────────────────────────────────────────
 // USERS
 // ────────────────────────────────────────────
@@ -151,19 +167,35 @@ export async function getUser(uid) {
 export async function getAllInterns() {
   const q    = query(collection(db, "users"), where("role", "==", "student"))
   const snap = await getDocs(q)
-  return snap.docs.map(d => ({ uid: d.id, ...d.data() }))
+  const interns = snap.docs.map(d => ({ uid: d.id, ...d.data() }))
+
+  // Assign colors to any intern missing one (existing accounts)
+  const existingColors = interns.filter(i => i.avatarColor).map(i => i.avatarColor)
+  const updates = []
+  interns.forEach(intern => {
+    if (!intern.avatarColor) {
+      const color = assignAvatarColor(intern.uid, existingColors)
+      intern.avatarColor = color
+      existingColors.push(color)
+      updates.push(updateDoc(doc(db, 'users', intern.uid), { avatarColor: color }))
+    }
+  })
+  if (updates.length) await Promise.all(updates)
+  return interns
 }
 
-// shift: 'day' | 'gy'
-export async function addIntern(email, password, name, hoursRequired = 600, shift = 'day') {
-  // Use secondary auth instance so the admin session is NOT affected
+export async function addIntern(email, password, name, hoursRequired = 600, shift = 'morning') {
+  // Pick least-used color from existing interns
+  const existingSnap   = await getDocs(query(collection(db, 'users'), where('role', '==', 'student')))
+  const existingColors = existingSnap.docs.map(d => d.data().avatarColor).filter(Boolean)
+  const avatarColor    = assignAvatarColor(null, existingColors)
+
   const credential = await createUserWithEmailAndPassword(secondaryAuth, email, password)
   await setDoc(doc(db, "users", credential.user.uid), {
-    name, email, role: "student", shift,
+    name, email, role: "student", shift, avatarColor,
     hoursRendered: 0, hoursRequired,
     createdAt: serverTimestamp(),
   })
-  // Sign out of secondary app immediately after — clean up
   await signOut(secondaryAuth)
   return credential.user.uid
 }
