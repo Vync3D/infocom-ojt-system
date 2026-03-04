@@ -4,7 +4,8 @@ import {
   getAllInterns, addIntern, removeIntern,
   getAllTasks, assignTask, assignGroupTask, deleteTask,
   getAttendanceLogs, getTodayAttendance, logoutUser, updateInternShift,
-  getShiftSettings, saveShiftSettings, editAttendanceRecord
+  getShiftSettings, saveShiftSettings, editAttendanceRecord,
+  getAllAttendanceInRange
 } from '../../firebase'
 
 // ── Helpers ──
@@ -279,6 +280,267 @@ function AssignGroupModal({ interns, onAssign, onCancel }) {
   )
 }
 
+// ── Download Excel Modal ──
+function DownloadExcelModal({ interns, onCancel }) {
+  const today     = new Date().toISOString().split('T')[0]
+  const monthAgo  = new Date(); monthAgo.setMonth(monthAgo.getMonth() - 1)
+  const [dateFrom, setDateFrom] = useState(monthAgo.toISOString().split('T')[0])
+  const [dateTo,   setDateTo]   = useState(today)
+  const [loading,  setLoading]  = useState(false)
+  const [error,    setError]    = useState('')
+
+  const fmt = (ts) => {
+    if (!ts?.toDate) return '—'
+    return ts.toDate().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })
+  }
+
+  const handleDownload = async () => {
+    if (dateFrom > dateTo) { setError('Start date must be before end date.'); return }
+    setLoading(true); setError('')
+    try {
+      const records = await getAllAttendanceInRange(dateFrom, dateTo)
+
+      // Build a lookup: uid → intern name/shift
+      const internMap = {}
+      interns.forEach(i => { internMap[i.uid] = i })
+
+      // Group records by month (YYYY-MM)
+      const byMonth = {}
+      records.forEach(r => {
+        const month = r.date?.slice(0, 7)
+        if (!month) return
+        if (!byMonth[month]) byMonth[month] = []
+        byMonth[month].push(r)
+      })
+
+      // Load SheetJS dynamically
+      const XLSX = await import('https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs')
+      const wb   = XLSX.utils.book_new()
+
+      const months = Object.keys(byMonth).sort()
+      if (months.length === 0) {
+        setError('No attendance records found in this date range.'); setLoading(false); return
+      }
+
+      months.forEach(month => {
+        const [year, mon] = month.split('-')
+        const sheetName   = new Date(parseInt(year), parseInt(mon) - 1, 1)
+          .toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+
+        const rows = byMonth[month].map(r => {
+          const intern   = internMap[r.uid]
+          const shiftMap = { morning: 'Morning', mid: 'Mid', gy: 'GY' }
+          return {
+            'Name':      intern?.name  || 'Unknown',
+            'Email':     intern?.email || '—',
+            'Shift':     shiftMap[r.shift] || r.shift || '—',
+            'Date':      r.date || '—',
+            'Time In':   fmt(r.timeIn),
+            'Time Out':  fmt(r.timeOut),
+            'Duration':  r.duration || '—',
+            'Status':    r.timeOut ? (r.status === 'late' ? 'Late' : 'Complete') : 'No Time Out',
+          }
+        })
+
+        const ws = XLSX.utils.json_to_sheet(rows)
+
+        // Column widths
+        ws['!cols'] = [
+          { wch: 22 }, { wch: 26 }, { wch: 10 },
+          { wch: 14 }, { wch: 12 }, { wch: 12 },
+          { wch: 12 }, { wch: 14 },
+        ]
+
+        // Header row bold styling
+        const range = XLSX.utils.decode_range(ws['!ref'])
+        for (let C = range.s.c; C <= range.e.c; C++) {
+          const cell = ws[XLSX.utils.encode_cell({ r: 0, c: C })]
+          if (cell) {
+            cell.s = {
+              font:      { bold: true, name: 'Arial', sz: 11, color: { rgb: 'FFFFFF' } },
+              fill:      { fgColor: { rgb: '1E293B' } },
+              alignment: { horizontal: 'center' },
+            }
+          }
+        }
+
+        XLSX.utils.book_append_sheet(wb, ws, sheetName.slice(0, 31))
+      })
+
+      // File name: InfocomOJT_Attendance_2026-01_to_2026-03.xlsx
+      const fileName = `InfocomOJT_Attendance_${dateFrom}_to_${dateTo}.xlsx`
+      XLSX.writeFile(wb, fileName)
+      onCancel()
+    } catch (e) {
+      console.error(e)
+      setError('Failed to generate Excel file. Please try again.')
+    }
+    setLoading(false)
+  }
+
+  return (
+    <div className="modal-overlay"><div className="modal">
+      <div className="modal-title">📥 Download Attendance</div>
+      <div className="modal-sub">Export attendance records as an Excel file. Each month gets its own sheet.</div>
+      <div className="modal-form">
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div className="modal-field">
+            <label>From</label>
+            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} max={today} />
+          </div>
+          <div className="modal-field">
+            <label>To</label>
+            <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} max={today} />
+          </div>
+        </div>
+        <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border)', borderRadius: 8, padding: '12px 14px', fontSize: '0.75rem', color: 'var(--muted)', lineHeight: 1.6 }}>
+          📊 Records from <strong style={{ color: 'var(--text)' }}>{dateFrom}</strong> to <strong style={{ color: 'var(--text)' }}>{dateTo}</strong> will be exported.<br />
+          Each month will be a separate sheet tab in the Excel file.
+        </div>
+        {error && <div style={{ color: '#ff5f57', fontSize: '0.75rem' }}>{error}</div>}
+        <div className="modal-actions">
+          <button className="btn-modal-cancel" onClick={onCancel}>Cancel</button>
+          <button className="btn-modal-confirm" onClick={handleDownload} disabled={loading}>
+            {loading ? '⏳ Generating...' : '⬇ Download Excel'}
+          </button>
+        </div>
+      </div>
+    </div></div>
+  )
+}
+
+// ── Download Single Intern Excel Modal ──
+function DownloadInternExcelModal({ intern, logs, onCancel }) {
+  const [loading, setLoading] = useState(false)
+  const [error,   setError]   = useState('')
+
+  const fmt = (ts) => {
+    if (!ts?.toDate) return '—'
+    return ts.toDate().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })
+  }
+
+  const handleDownload = async () => {
+    if (logs.length === 0) { setError('No attendance records found for this intern.'); return }
+    setLoading(true); setError('')
+    try {
+      const XLSX = await import('https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs')
+      const wb   = XLSX.utils.book_new()
+      const shiftMap = { morning: 'Morning', mid: 'Mid', gy: 'GY' }
+
+      // Group by month
+      const byMonth = {}
+      logs.forEach(r => {
+        const month = r.date?.slice(0, 7)
+        if (!month) return
+        if (!byMonth[month]) byMonth[month] = []
+        byMonth[month].push(r)
+      })
+
+      const months = Object.keys(byMonth).sort()
+
+      months.forEach(month => {
+        const [year, mon] = month.split('-')
+        const sheetName   = new Date(parseInt(year), parseInt(mon) - 1, 1)
+          .toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+
+        const rows = byMonth[month].map(r => ({
+          'Date':      r.date || '—',
+          'Shift':     shiftMap[r.shift] || r.shift || '—',
+          'Time In':   fmt(r.timeIn),
+          'Time Out':  fmt(r.timeOut),
+          'Duration':  r.duration || '—',
+          'Status':    !r.timeOut ? 'No Time Out' : r.status === 'late' ? 'Late' : 'Complete',
+          'Overtime':  (() => {
+            if (!r.timeOut) return '—'
+            const shiftEnds = { morning: 15, mid: 22, gy: 7 }
+            const endHour   = shiftEnds[r.shift] ?? 15
+            const outHour   = r.timeOut.toDate().getHours()
+            return outHour > endHour ? 'Yes' : 'No'
+          })(),
+        }))
+
+        const ws = XLSX.utils.json_to_sheet([])
+
+        // Title rows
+        XLSX.utils.sheet_add_aoa(ws, [
+          [`Attendance Report — ${intern.name}`],
+          [`${intern.email}  |  Shift: ${shiftMap[intern.shift] || intern.shift}  |  ${sheetName}`],
+          [],
+        ], { origin: 'A1' })
+
+        XLSX.utils.sheet_add_json(ws, rows, { origin: 'A4' })
+
+        // Summary row
+        const dataLen  = rows.length
+        const lastRow  = 4 + dataLen + 1
+        const doneRows = rows.filter(r => r['Status'] === 'Complete' || r['Status'] === 'Late')
+        XLSX.utils.sheet_add_aoa(ws, [
+          [],
+          [`Total Days: ${dataLen}`, '', `Present: ${doneRows.length}`, '', `Missing Time Out: ${rows.filter(r => r['Status'] === 'No Time Out').length}`, '', `Late: ${rows.filter(r => r['Status'] === 'Late').length}`],
+        ], { origin: `A${lastRow}` })
+
+        ws['!cols'] = [{ wch: 14 }, { wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 16 }, { wch: 10 }]
+
+        // Merge title cell
+        ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 6 } }, { s: { r: 1, c: 0 }, e: { r: 1, c: 6 } }]
+
+        XLSX.utils.book_append_sheet(wb, ws, sheetName.slice(0, 31))
+      })
+
+      const fileName = `${intern.name.replace(/\s+/g, '_')}_Attendance.xlsx`
+      XLSX.writeFile(wb, fileName)
+      onCancel()
+    } catch (e) {
+      console.error(e)
+      setError('Failed to generate Excel file. Please try again.')
+    }
+    setLoading(false)
+  }
+
+  const months = [...new Set(logs.map(l => l.date?.slice(0, 7)).filter(Boolean))].sort()
+
+  return (
+    <div className="modal-overlay"><div className="modal">
+      <div className="modal-title">📥 Download {intern.name}'s Attendance</div>
+      <div className="modal-sub">Exports all attendance records for this intern. Each month gets its own sheet.</div>
+      <div className="modal-form">
+        {/* Summary of what will be exported */}
+        <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border)', borderRadius: 8, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div className="intern-avatar" style={{ width: 36, height: 36, fontSize: '0.75rem', flexShrink: 0 }}>
+              {intern.name?.split(' ').map(n => n[0]).join('').slice(0,2).toUpperCase()}
+            </div>
+            <div>
+              <div style={{ fontSize: '0.85rem', fontWeight: 700 }}>{intern.name}</div>
+              <div style={{ fontSize: '0.7rem', color: 'var(--muted)' }}>{intern.email}</div>
+            </div>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginTop: 4 }}>
+            {[['📋 Records', logs.length], ['📅 Months', months.length], ['⏱ Hours', `${Math.floor(intern.hoursRendered || 0)}h`]].map(([label, val]) => (
+              <div key={label} style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 6, padding: '8px 12px', textAlign: 'center' }}>
+                <div style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--accent)' }}>{val}</div>
+                <div style={{ fontSize: '0.62rem', color: 'var(--muted)', marginTop: 2 }}>{label}</div>
+              </div>
+            ))}
+          </div>
+          {months.length > 0 && (
+            <div style={{ fontSize: '0.68rem', color: 'var(--muted)' }}>
+              Sheets: {months.map(m => monthLabel(m)).join(', ')}
+            </div>
+          )}
+        </div>
+        {error && <div style={{ color: '#ff5f57', fontSize: '0.75rem' }}>{error}</div>}
+        <div className="modal-actions">
+          <button className="btn-modal-cancel" onClick={onCancel}>Cancel</button>
+          <button className="btn-modal-confirm" onClick={handleDownload} disabled={loading}>
+            {loading ? '⏳ Generating...' : '⬇ Download Excel'}
+          </button>
+        </div>
+      </div>
+    </div></div>
+  )
+}
+
 // ── Edit Attendance Modal ──
 function EditAttendanceModal({ log, onSave, onCancel }) {
   const fmt24 = (date) => date
@@ -517,6 +779,10 @@ export default function AdminDashboard({ user, onLogout }) {
         </div></div>
       )}
       {editingLog && <EditAttendanceModal log={editingLog.log} onSave={handleEditAttendance} onCancel={() => setEditingLog(null)} />}
+      {modal === 'download-excel' && <DownloadExcelModal interns={interns} onCancel={() => setModal(null)} />}
+      {modal === 'download-excel-intern' && viewingAttendance && (
+        <DownloadInternExcelModal intern={viewingAttendance} logs={attendanceLogs} onCancel={() => setModal(null)} />
+      )}
 
       <header className="admin-topbar">
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -800,11 +1066,14 @@ export default function AdminDashboard({ user, onLogout }) {
                 <div className="admin-card-header">
                   <div className="admin-card-title">Attendance Records</div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                    <button className="btn-download-excel" onClick={() => setModal(viewingAttendance ? 'download-excel-intern' : 'download-excel')}>
+                      📥 {viewingAttendance ? `Download ${viewingAttendance.name.split(' ')[0]}'s Excel` : 'Download Excel'}
+                    </button>
                     <div className="assign-intern-select">
-                      <span style={{ fontSize: '0.72rem', color: 'var(--muted)' }}>Intern:</span>
+                      <span style={{ fontSize: '0.72rem', color: 'var(--muted)' }}>🔍 Intern:</span>
                       <select className="assign-select" value={viewingAttendance?.uid || ''}
-                        onChange={e => setViewingAttendance(interns.find(i => i.uid === e.target.value))}>
-                        <option value="">-- Select Intern --</option>
+                        onChange={e => setViewingAttendance(e.target.value ? interns.find(i => i.uid === e.target.value) : null)}>
+                        <option value="">All Interns</option>
                         {interns.map(i => <option key={i.uid} value={i.uid}>{i.name}</option>)}
                       </select>
                     </div>
@@ -821,9 +1090,69 @@ export default function AdminDashboard({ user, onLogout }) {
                     )}
                   </div>
                 </div>
-                {viewingAttendance ? (
+
+                {/* ── DEFAULT: All interns overview ── */}
+                {!viewingAttendance && (
                   <>
-                    <div className="attendance-intern-header">
+                    <div className="intern-table-header" style={{ gridTemplateColumns: '1.8fr 0.9fr 1fr 1fr 1fr' }}>
+                      <div className="intern-th">Intern</div>
+                      <div className="intern-th">Shift</div>
+                      <div className="intern-th">Today Status</div>
+                      <div className="intern-th">Time In</div>
+                      <div className="intern-th">Time Out</div>
+                    </div>
+                    <div className="intern-rows">
+                      {interns.length === 0 && (
+                        <div style={{ padding: '48px 24px', textAlign: 'center', color: 'var(--muted)', fontSize: '0.8rem' }}>No interns yet.</div>
+                      )}
+                      {interns.map(intern => {
+                        const today   = new Date().toISOString().split('T')[0]
+                        const rec     = todayAttendance.find(a => a.uid === intern.uid)
+                        const timeIn  = rec?.timeIn?.toDate  ? rec.timeIn.toDate().toLocaleTimeString('en-US',  { hour: '2-digit', minute: '2-digit', hour12: true }) : '—'
+                        const timeOut = rec?.timeOut?.toDate ? rec.timeOut.toDate().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }) : '—'
+                        const status  = !rec ? 'not-in' : rec.timeOut ? 'timed-out' : 'timed-in'
+                        const shiftColors = {
+                          morning: { bg: 'rgba(0,229,160,0.08)',   color: 'var(--accent)',  border: '1px solid rgba(0,229,160,0.2)' },
+                          mid:     { bg: 'rgba(245,158,11,0.08)',  color: '#f59e0b',        border: '1px solid rgba(245,158,11,0.2)' },
+                          gy:      { bg: 'rgba(0,120,255,0.08)',   color: 'var(--accent2)', border: '1px solid rgba(0,120,255,0.2)' },
+                        }
+                        const sc = shiftColors[intern.shift] || shiftColors.morning
+                        return (
+                          <div className="intern-row" key={intern.uid}
+                            style={{ gridTemplateColumns: '1.8fr 0.9fr 1fr 1fr 1fr', cursor: 'pointer' }}
+                            onClick={() => setViewingAttendance(intern)}
+                          >
+                            <div className="intern-name-cell">
+                              <div className="intern-avatar">{getInitials(intern.name)}</div>
+                              <div>
+                                <div className="intern-name">{intern.name}</div>
+                                <div className="intern-email">{intern.email}</div>
+                              </div>
+                            </div>
+                            <div>
+                              <span style={{ fontSize: '0.65rem', padding: '2px 8px', borderRadius: '100px', textTransform: 'uppercase', letterSpacing: '0.07em', fontWeight: 600, background: sc.bg, color: sc.color, border: sc.border }}>
+                                {intern.shift === 'gy' ? '🌙 GY' : intern.shift === 'mid' ? '🌤️ Mid' : '🌅 Morning'}
+                              </span>
+                            </div>
+                            <div>
+                              {status === 'timed-in'  && <span className="att-status-badge in">● Timed In</span>}
+                              {status === 'timed-out' && <span className="att-status-badge out">✓ Done</span>}
+                              {status === 'not-in'    && <span className="att-status-badge absent">○ Not In</span>}
+                            </div>
+                            <div className="intern-td" style={{ color: 'var(--accent)' }}>{rec ? `↓ ${timeIn}` : '—'}</div>
+                            <div className="intern-td" style={{ color: 'var(--accent2)' }}>{rec?.timeOut ? `↑ ${timeOut}` : '—'}</div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </>
+                )}
+
+                {/* ── FILTERED: Specific intern detail ── */}
+                {viewingAttendance && (
+                  <>
+                    <div className="attendance-intern-header" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <button className="btn-icon" onClick={() => setViewingAttendance(null)} style={{ fontSize: '0.75rem' }}>← All</button>
                       <div className="intern-avatar">{getInitials(viewingAttendance.name)}</div>
                       <div>
                         <div className="attendance-intern-name">{viewingAttendance.name}</div>
@@ -852,7 +1181,6 @@ export default function AdminDashboard({ user, onLogout }) {
                             const [eh, em]  = shiftCfg.end.split(':').map(Number)
                             const shiftEnd  = new Date(timeOutD)
                             shiftEnd.setHours(eh, em, 0, 0)
-                            // For GY shift end is next day
                             if (log.shift === 'gy' && eh < 12) shiftEnd.setDate(shiftEnd.getDate() + 1)
                             return timeOutD > shiftEnd
                           })()
@@ -871,10 +1199,7 @@ export default function AdminDashboard({ user, onLogout }) {
                                 {isOvertime && <span className="att-overtime">⏱ OT</span>}
                               </div>
                               <div>
-                                <button
-                                  className="btn-icon"
-                                  onClick={() => setEditingLog({ log, internUid: viewingAttendance.uid })}
-                                >✎ Edit</button>
+                                <button className="btn-icon" onClick={() => setEditingLog({ log, internUid: viewingAttendance.uid })}>✎ Edit</button>
                               </div>
                             </div>
                           )
@@ -882,11 +1207,6 @@ export default function AdminDashboard({ user, onLogout }) {
                       })()}
                     </div>
                   </>
-                ) : (
-                  <div style={{ padding: '60px 24px', textAlign: 'center', color: 'var(--muted)', fontSize: '0.8rem' }}>
-                    <span style={{ fontSize: '2rem', display: 'block', marginBottom: '12px' }}>👆</span>
-                    Select an intern above to view their attendance.
-                  </div>
                 )}
               </div>
             )}

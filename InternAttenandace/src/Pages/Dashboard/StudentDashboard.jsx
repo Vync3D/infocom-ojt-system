@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import './StudentDashboard.css'
 import AttendancePage from '../Attendance/AttendancePage'
 import TasksPage from '../Tasks/TasksPage'
-import { timeIn, timeOut, getAttendanceLogs, getTasksForInternAll, logoutUser } from '../../firebase'
+import { timeIn, timeOut, getAttendanceLogs, getTasksForInternAll, logoutUser, changePassword } from '../../firebase'
 
 function useClockTime() {
   const [now, setNow] = useState(new Date())
@@ -29,6 +29,74 @@ function getInitials(name) {
 const STATUS_LABELS = { pending: 'Pending', 'in-progress': 'In Progress', done: 'Done' }
 const FILTERS       = ['All', 'Pending', 'In Progress', 'Done']
 
+// ── Change Password Modal ──
+function ChangePwModal({ onClose }) {
+  const [currentPw, setCurrentPw] = useState('')
+  const [newPw,     setNewPw]     = useState('')
+  const [confirmPw, setConfirmPw] = useState('')
+  const [loading,   setLoading]   = useState(false)
+  const [error,     setError]     = useState('')
+  const [success,   setSuccess]   = useState(false)
+
+  const handleSubmit = async () => {
+    if (newPw.length < 6)       { setError('New password must be at least 6 characters.'); return }
+    if (newPw !== confirmPw)    { setError('New passwords do not match.'); return }
+    if (newPw === currentPw)    { setError('New password must be different from current.'); return }
+    setLoading(true); setError('')
+    try {
+      await changePassword(currentPw, newPw)
+      setSuccess(true)
+    } catch (e) {
+      if (e.code === 'auth/wrong-password' || e.code === 'auth/invalid-credential') setError('Current password is incorrect.')
+      else setError(e.message)
+    }
+    setLoading(false)
+  }
+
+  return (
+    <div className="modal-overlay" style={{ zIndex: 1000 }}>
+      <div className="modal">
+        {success ? (
+          <div style={{ textAlign: 'center', padding: '12px 0' }}>
+            <div style={{ fontSize: '2rem', marginBottom: 10 }}>✅</div>
+            <div className="modal-title">Password Changed!</div>
+            <div className="modal-sub">Your password has been updated successfully.</div>
+            <div className="modal-actions" style={{ marginTop: 20 }}>
+              <button className="btn-modal-confirm" onClick={onClose}>Done</button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="modal-title">🔑 Change Password</div>
+            <div className="modal-sub">Enter your current password to set a new one.</div>
+            <div className="modal-form">
+              <div className="modal-field">
+                <label>Current Password</label>
+                <input type="password" placeholder="Your current password" value={currentPw} onChange={e => setCurrentPw(e.target.value)} />
+              </div>
+              <div className="modal-field">
+                <label>New Password</label>
+                <input type="password" placeholder="Min. 6 characters" value={newPw} onChange={e => setNewPw(e.target.value)} />
+              </div>
+              <div className="modal-field">
+                <label>Confirm New Password</label>
+                <input type="password" placeholder="Repeat new password" value={confirmPw} onChange={e => setConfirmPw(e.target.value)} />
+              </div>
+              {error && <div style={{ color: '#ff5f57', fontSize: '0.75rem' }}>{error}</div>}
+              <div className="modal-actions">
+                <button className="btn-modal-cancel" onClick={onClose}>Cancel</button>
+                <button className="btn-modal-confirm" onClick={handleSubmit} disabled={loading}>
+                  {loading ? 'Saving...' : 'Change Password'}
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export default function StudentDashboard({ user, onLogout }) {
   const now = useClockTime()
   const [page, setPage]             = useState('dashboard')
@@ -45,24 +113,37 @@ export default function StudentDashboard({ user, onLogout }) {
 
   useEffect(() => {
     if (!user?.uid) return
-    const today = new Date().toISOString().split('T')[0]
-    // For GY shift, today's record might be stored under yesterday
-    const gyDate = (() => {
-      const h = new Date().getHours()
-      if (shift === 'gy' && h < 12) {
-        const y = new Date(); y.setDate(y.getDate() - 1)
-        return y.toISOString().split('T')[0]
+
+    // Use local date (not UTC) to avoid timezone mismatch
+    const now       = new Date()
+    const toLocal   = (d) => {
+      const y = d.getFullYear()
+      const m = String(d.getMonth() + 1).padStart(2, '0')
+      const day = String(d.getDate()).padStart(2, '0')
+      return `${y}-${m}-${day}`
+    }
+    const today = toLocal(now)
+
+    // GY shift: if it's before noon, the active shift belongs to yesterday
+    const checkDate = (() => {
+      if (shift === 'gy' && now.getHours() < 12) {
+        const y = new Date(now); y.setDate(y.getDate() - 1)
+        return toLocal(y)
       }
       return today
     })()
-    const checkDate = shift === 'gy' ? gyDate : today
 
     getAttendanceLogs(user.uid).then(fetchedLogs => {
       setLogs(fetchedLogs)
+      // Only look at today's record — strictly match checkDate
       const todayLog = fetchedLogs.find(l => l.date === checkDate)
       if (todayLog) {
         if (todayLog.timeOut) setTimeState('timed-out')
-        else { setTimeState('timed-in'); setTimeInAt(todayLog.timeIn?.toDate()) }
+        else { setTimeState('timed-in'); setTimeInAt(todayLog.timeIn?.toDate?.()) }
+      } else {
+        // No record for today — reset to idle (handles new day correctly)
+        setTimeState('idle')
+        setTimeInAt(null)
       }
     }).catch(console.error)
 
@@ -142,7 +223,9 @@ export default function StudentDashboard({ user, onLogout }) {
     </span>
   )
 
-  if (page === 'attendance') return <AttendancePage uid={user?.uid} onBack={() => setPage('dashboard')} />
+  const [showChangePw, setShowChangePw] = useState(false)
+
+  if (page === 'attendance') return <AttendancePage uid={user?.uid} user={user} onBack={() => setPage('dashboard')} />
   if (page === 'tasks')      return <TasksPage      uid={user?.uid} onBack={() => setPage('dashboard')} />
 
   return (
@@ -151,9 +234,13 @@ export default function StudentDashboard({ user, onLogout }) {
         <div className="topbar-logo">Infocom<span>OJT</span></div>
         <div className="topbar-right">
           <span className="topbar-greeting">Hello, <strong>{user?.name?.split(' ')[0] || 'Intern'}</strong></span>
+          <button className="btn-logout" style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--muted)', borderColor: 'var(--border)' }} onClick={() => setShowChangePw(true)}>🔑 Password</button>
           <button className="btn-logout" onClick={handleLogout}>⎋ Logout</button>
         </div>
       </header>
+
+      {/* Change Password Modal */}
+      {showChangePw && <ChangePwModal onClose={() => setShowChangePw(false)} />}
 
       <div className="dashboard-body">
         {/* Profile Banner */}

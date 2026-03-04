@@ -4,6 +4,9 @@ import {
   signInWithEmailAndPassword,
   signOut,
   createUserWithEmailAndPassword,
+  updatePassword,
+  reauthenticateWithCredential,
+  EmailAuthProvider,
 } from "firebase/auth"
 import {
   getFirestore,
@@ -94,16 +97,24 @@ function isLate(shift, date) {
   return hour > 9 || (hour === 9 && min > 0)
 }
 
+function getLocalDate(d = new Date()) {
+  const y   = d.getFullYear()
+  const m   = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
 function getShiftDate(shift) {
   const now  = new Date()
   const hour = now.getHours()
-  // GY shift: if early morning (before noon), belongs to yesterday
+  // Only GY shift: if early morning (before noon), record belongs to yesterday
+  // Morning and Mid shifts always use the current calendar date
   if (shift === 'gy' && hour < 12) {
     const yesterday = new Date(now)
     yesterday.setDate(yesterday.getDate() - 1)
-    return yesterday.toISOString().split('T')[0]
+    return getLocalDate(yesterday)
   }
-  return now.toISOString().split('T')[0]
+  return getLocalDate(now)
 }
 
 // ────────────────────────────────────────────
@@ -118,6 +129,15 @@ export async function loginUser(email, password) {
 
 export async function logoutUser() {
   await signOut(auth)
+}
+
+// Change password — requires current password for re-authentication
+export async function changePassword(currentPassword, newPassword) {
+  const user       = auth.currentUser
+  if (!user) throw new Error('Not logged in.')
+  const credential = EmailAuthProvider.credential(user.email, currentPassword)
+  await reauthenticateWithCredential(user, credential)
+  await updatePassword(user, newPassword)
 }
 
 // ────────────────────────────────────────────
@@ -251,12 +271,22 @@ export async function getAttendanceLogs(uid) {
   return snap.docs.map(d => ({ id: d.id, ...d.data() }))
 }
 
+// Fetch all attendance records across all interns within a date range
+export async function getAllAttendanceInRange(dateFrom, dateTo) {
+  const q    = query(
+    collection(db, "attendance"),
+    where("date", ">=", dateFrom),
+    where("date", "<=", dateTo),
+    orderBy("date", "asc")
+  )
+  const snap = await getDocs(q)
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }))
+}
+
 export async function getTodayAttendance() {
-  const today = new Date().toISOString().split('T')[0]
-  // Also check yesterday for GY shift interns who started last night
-  const yesterday = new Date()
-  yesterday.setDate(yesterday.getDate() - 1)
-  const yd = yesterday.toISOString().split('T')[0]
+  const today     = getLocalDate()
+  const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1)
+  const yd        = getLocalDate(yesterday)
 
   const [todaySnap, ydSnap] = await Promise.all([
     getDocs(query(collection(db, 'attendance'), where('date', '==', today))),
