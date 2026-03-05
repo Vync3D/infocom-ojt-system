@@ -3,6 +3,7 @@ import './StudentDashboard.css'
 import AttendancePage from '../Attendance/AttendancePage'
 import TasksPage from '../Tasks/TasksPage'
 import { timeIn, timeOut, getAttendanceLogs, getTasksForInternAll, logoutUser, changePassword } from '../../firebase'
+import ThemePicker from '../../components/ThemePicker'
 
 function useClockTime() {
   const [now, setNow] = useState(new Date())
@@ -148,7 +149,7 @@ export default function StudentDashboard({ user, onLogout }) {
     }).catch(console.error)
 
     getTasksForInternAll(user.uid).then(setTasks).catch(console.error)
-  }, [user?.uid])
+  }, [user?.uid, shift])
 
   const handleTimeIn = async () => {
     setLoadingIn(true); setError('')
@@ -224,6 +225,7 @@ export default function StudentDashboard({ user, onLogout }) {
   )
 
   const [showChangePw, setShowChangePw] = useState(false)
+  const [showTheme, setShowTheme]       = useState(false)
 
   if (page === 'attendance') return <AttendancePage uid={user?.uid} user={user} onBack={() => setPage('dashboard')} />
   if (page === 'tasks')      return <TasksPage      uid={user?.uid} onBack={() => setPage('dashboard')} />
@@ -234,11 +236,13 @@ export default function StudentDashboard({ user, onLogout }) {
         <div className="topbar-logo">Infocom<span>OJT</span></div>
         <div className="topbar-right">
           <span className="topbar-greeting">Hello, <strong>{user?.name?.split(' ')[0] || 'Intern'}</strong></span>
+          <button className="btn-logout" style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--muted)', borderColor: 'var(--border)' }} onClick={() => setShowTheme(true)}>🎨 Theme</button>
           <button className="btn-logout" style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--muted)', borderColor: 'var(--border)' }} onClick={() => setShowChangePw(true)}>🔑 Password</button>
           <button className="btn-logout" onClick={handleLogout}>⎋ Logout</button>
         </div>
       </header>
 
+      {showTheme && <ThemePicker onClose={() => setShowTheme(false)} />}
       {/* Change Password Modal */}
       {showChangePw && <ChangePwModal onClose={() => setShowChangePw(false)} />}
 

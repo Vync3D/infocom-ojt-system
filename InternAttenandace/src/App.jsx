@@ -5,11 +5,15 @@ import { getUser } from './firebase'
 import LoginPage from './Pages/Login/LoginPage'
 import StudentDashboard from './Pages/Dashboard/StudentDashboard'
 import AdminDashboard from './Pages/Admin/AdminDashboard'
+import { loadSavedTheme } from './components/themeUtils'
+
+// Apply saved theme immediately on load
+loadSavedTheme()
 
 function Loader() {
   return (
     <div className="loader">
-      <div className="loader-logo">Track<span>OJT</span></div>
+      <div className="loader-logo">Infocom<span>OJT</span></div>
       <div className="loader-bar-wrap"><div className="loader-bar" /></div>
       <div className="loader-status">Initializing workspace...</div>
     </div>

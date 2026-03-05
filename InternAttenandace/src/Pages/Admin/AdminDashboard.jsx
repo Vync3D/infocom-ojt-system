@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react'
 import './AdminDashboard.css'
+import ThemePicker from '../../components/ThemePicker'
 import {
   getAllInterns, addIntern, removeIntern,
   getAllTasks, assignTask, assignGroupTask, deleteTask,
-  getAttendanceLogs, getTodayAttendance, logoutUser, updateInternShift,
+  getAttendanceLogs, getTodayAttendance, logoutUser,
   getShiftSettings, saveShiftSettings, editAttendanceRecord,
   getAllAttendanceInRange
 } from '../../firebase'
@@ -289,6 +290,173 @@ function AssignGroupModal({ interns, onAssign, onCancel }) {
 }
 
 // ── Download Excel Modal ──
+// ── Shared helper: build a day-grouped worksheet with optional title rows ──
+function buildDayGroupedSheetWithTitle(XLSX, titleAoa, monthRecords, includeNameCol) {
+  const fmt = (ts) => ts?.toDate ? ts.toDate().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }) : '—'
+  const shiftMap = { morning: 'Morning', mid: 'Mid', gy: 'GY' }
+  const COLS = includeNameCol
+    ? ['Name', 'Email', 'Shift', 'Time In', 'Time Out', 'Duration', 'Status']
+    : ['Shift', 'Time In', 'Time Out', 'Duration', 'Status']
+  const numCols = Math.max(COLS.length, titleAoa[0]?.length || 0)
+
+  const byDate = {}
+  monthRecords.forEach(r => { if (!byDate[r.date]) byDate[r.date] = []; byDate[r.date].push(r) })
+  const sortedDates = Object.keys(byDate).sort()
+
+  const aoa    = []
+  const merges = []
+  const styles = {}
+
+  // Title rows
+  titleAoa.forEach((row, i) => {
+    const paddedRow = [...row, ...Array(numCols - row.length).fill('')]
+    aoa.push(paddedRow)
+    if (row.length > 0 && row[0]) {
+      merges.push({ s: { r: i, c: 0 }, e: { r: i, c: numCols - 1 } })
+      styles[i] = i === 0 ? 'title-main' : 'title-sub'
+    }
+  })
+
+  // Day groups
+  sortedDates.forEach((date, di) => {
+    if (di > 0) aoa.push(Array(numCols).fill(''))
+    const dateLabel  = new Date(date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
+    const dayRecs    = byDate[date]
+    const dateRowIdx = aoa.length
+    aoa.push([`${dateLabel}   (${dayRecs.length} record${dayRecs.length !== 1 ? 's' : ''})`, ...Array(numCols - 1).fill('')])
+    merges.push({ s: { r: dateRowIdx, c: 0 }, e: { r: dateRowIdx, c: numCols - 1 } })
+    styles[dateRowIdx] = 'date-header'
+
+    const colRowIdx = aoa.length
+    aoa.push([...COLS, ...Array(numCols - COLS.length).fill('')])
+    styles[colRowIdx] = 'col-header'
+
+    dayRecs.sort((a, b) => (a.timeIn?.toDate?.()?.getTime() || 0) - (b.timeIn?.toDate?.()?.getTime() || 0))
+    dayRecs.forEach(r => {
+      const status     = !r.timeOut ? 'No Time Out' : r.status === 'late' ? 'Late' : 'Complete'
+      const row        = includeNameCol
+        ? [r._internName || '—', r._internEmail || '—', shiftMap[r.shift] || r.shift || '—', fmt(r.timeIn), fmt(r.timeOut), r.duration || '—', status]
+        : [shiftMap[r.shift] || r.shift || '—', fmt(r.timeIn), fmt(r.timeOut), r.duration || '—', status]
+      const dataRowIdx = aoa.length
+      aoa.push([...row, ...Array(numCols - row.length).fill('')])
+      styles[dataRowIdx] = status === 'No Time Out' ? 'data-warning' : status === 'Late' ? 'data-late' : 'data'
+    })
+  })
+
+  const ws = XLSX.utils.aoa_to_sheet(aoa)
+  aoa.forEach((_, rowIdx) => {
+    const type = styles[rowIdx]
+    if (!type) return
+    for (let c = 0; c < numCols; c++) {
+      const addr = XLSX.utils.encode_cell({ r: rowIdx, c })
+      if (!ws[addr]) ws[addr] = { v: '', t: 's' }
+      const cell = ws[addr]
+      if (type === 'title-main')    cell.s = { font: { bold: true, sz: 13, name: 'Arial', color: { rgb: 'FFFFFF' } }, fill: { fgColor: { rgb: '0D1117' } } }
+      else if (type === 'title-sub') cell.s = { font: { sz: 10, name: 'Arial', color: { rgb: '94A3B8' } }, fill: { fgColor: { rgb: '0D1117' } } }
+      else if (type === 'date-header') cell.s = { font: { bold: true, sz: 11, name: 'Arial', color: { rgb: 'FFFFFF' } }, fill: { fgColor: { rgb: '0F172A' } } }
+      else if (type === 'col-header')  cell.s = { font: { bold: true, sz: 9,  name: 'Arial', color: { rgb: 'A0AEC0' } }, fill: { fgColor: { rgb: '1E293B' } }, alignment: { horizontal: 'center' } }
+      else if (type === 'data-warning') cell.s = { font: { sz: 10, color: { rgb: 'F59E0B' }, name: 'Arial' }, fill: { fgColor: { rgb: '292318' } } }
+      else if (type === 'data-late')    cell.s = { font: { sz: 10, color: { rgb: 'EF4444' }, name: 'Arial' } }
+      else                              cell.s = { font: { sz: 10, name: 'Arial' } }
+    }
+  })
+  ws['!merges'] = merges
+  ws['!cols']   = includeNameCol
+    ? [{ wch: 22 }, { wch: 26 }, { wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 14 }]
+    : [{ wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 14 }]
+  return ws
+}
+
+// ── Shared helper: build a day-grouped worksheet ──
+function buildDayGroupedSheet(XLSX, monthRecords, internMap, includeNameCol = true) {
+  const fmt = (ts) => ts?.toDate ? ts.toDate().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }) : '—'
+  const shiftMap = { morning: 'Morning', mid: 'Mid', gy: 'GY' }
+
+  // Group by date, sort dates ascending
+  const byDate = {}
+  monthRecords.forEach(r => {
+    if (!byDate[r.date]) byDate[r.date] = []
+    byDate[r.date].push(r)
+  })
+  const sortedDates = Object.keys(byDate).sort()
+
+  // Build AOA (array of arrays) manually so we control every row
+  const COLS = includeNameCol
+    ? ['Name', 'Email', 'Shift', 'Time In', 'Time Out', 'Duration', 'Status']
+    : ['Shift', 'Time In', 'Time Out', 'Duration', 'Status']
+  const numCols = COLS.length
+
+  const aoa    = []   // all rows
+  const merges = []   // merge ranges for date header cells
+  const styles = {}   // row index → style type: 'date-header' | 'col-header' | 'data' | 'summary'
+
+  sortedDates.forEach((date, di) => {
+    // blank gap between days (except first)
+    if (di > 0) aoa.push(Array(numCols).fill(''))
+
+    // Date header row — spans all columns
+    const dateLabel = new Date(date + 'T00:00:00').toLocaleDateString('en-US', {
+      weekday: 'long', month: 'long', day: 'numeric', year: 'numeric'
+    })
+    const dayRecs   = byDate[date]
+    const dateRowIdx = aoa.length
+    aoa.push([`${dateLabel}   (${dayRecs.length} record${dayRecs.length !== 1 ? 's' : ''})`, ...Array(numCols - 1).fill('')])
+    merges.push({ s: { r: dateRowIdx, c: 0 }, e: { r: dateRowIdx, c: numCols - 1 } })
+    styles[dateRowIdx] = 'date-header'
+
+    // Column header row
+    const colRowIdx = aoa.length
+    aoa.push(COLS)
+    styles[colRowIdx] = 'col-header'
+
+    // Sort records within day by time in
+    dayRecs.sort((a, b) => (a.timeIn?.toDate?.()?.getTime() || 0) - (b.timeIn?.toDate?.()?.getTime() || 0))
+
+    // Data rows
+    dayRecs.forEach(r => {
+      const intern = internMap?.[r.uid]
+      const status = !r.timeOut ? 'No Time Out' : r.status === 'late' ? 'Late' : 'Complete'
+      const row = includeNameCol
+        ? [intern?.name || 'Unknown', intern?.email || '—', shiftMap[r.shift] || r.shift || '—', fmt(r.timeIn), fmt(r.timeOut), r.duration || '—', status]
+        : [shiftMap[r.shift] || r.shift || '—', fmt(r.timeIn), fmt(r.timeOut), r.duration || '—', status]
+      const dataRowIdx = aoa.length
+      aoa.push(row)
+      styles[dataRowIdx] = status === 'No Time Out' ? 'data-warning' : status === 'Late' ? 'data-late' : 'data'
+    })
+  })
+
+  const ws = XLSX.utils.aoa_to_sheet(aoa)
+
+  // Apply styles
+  aoa.forEach((_, rowIdx) => {
+    const type = styles[rowIdx]
+    if (!type) return
+    for (let c = 0; c < numCols; c++) {
+      const addr = XLSX.utils.encode_cell({ r: rowIdx, c })
+      if (!ws[addr]) ws[addr] = { v: '', t: 's' }
+      const cell = ws[addr]
+      if (type === 'date-header') {
+        cell.s = { font: { bold: true, sz: 11, color: { rgb: 'FFFFFF' }, name: 'Arial' }, fill: { fgColor: { rgb: '0F172A' } }, alignment: { vertical: 'center' } }
+      } else if (type === 'col-header') {
+        cell.s = { font: { bold: true, sz: 9, color: { rgb: 'A0AEC0' }, name: 'Arial' }, fill: { fgColor: { rgb: '1E293B' } }, alignment: { horizontal: 'center' } }
+      } else if (type === 'data-warning') {
+        cell.s = { font: { sz: 10, color: { rgb: 'F59E0B' }, name: 'Arial' }, fill: { fgColor: { rgb: '292318' } } }
+      } else if (type === 'data-late') {
+        cell.s = { font: { sz: 10, color: { rgb: 'EF4444' }, name: 'Arial' } }
+      } else {
+        cell.s = { font: { sz: 10, name: 'Arial' } }
+      }
+    }
+  })
+
+  ws['!merges'] = merges
+  ws['!cols']   = includeNameCol
+    ? [{ wch: 22 }, { wch: 26 }, { wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 14 }]
+    : [{ wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 14 }]
+
+  return ws
+}
+
 function DownloadExcelModal({ interns, onCancel }) {
   const today     = new Date().toISOString().split('T')[0]
   const monthAgo  = new Date(); monthAgo.setMonth(monthAgo.getMonth() - 1)
@@ -297,22 +465,15 @@ function DownloadExcelModal({ interns, onCancel }) {
   const [loading,  setLoading]  = useState(false)
   const [error,    setError]    = useState('')
 
-  const fmt = (ts) => {
-    if (!ts?.toDate) return '—'
-    return ts.toDate().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })
-  }
-
   const handleDownload = async () => {
     if (dateFrom > dateTo) { setError('Start date must be before end date.'); return }
     setLoading(true); setError('')
     try {
-      const records = await getAllAttendanceInRange(dateFrom, dateTo)
-
-      // Build a lookup: uid → intern name/shift
+      const records   = await getAllAttendanceInRange(dateFrom, dateTo)
       const internMap = {}
       interns.forEach(i => { internMap[i.uid] = i })
 
-      // Group records by month (YYYY-MM)
+      // Group by month
       const byMonth = {}
       records.forEach(r => {
         const month = r.date?.slice(0, 7)
@@ -321,63 +482,21 @@ function DownloadExcelModal({ interns, onCancel }) {
         byMonth[month].push(r)
       })
 
-      // Load SheetJS dynamically
+      const months = Object.keys(byMonth).sort()
+      if (months.length === 0) { setError('No attendance records found in this date range.'); setLoading(false); return }
+
       const XLSX = await import('https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs')
       const wb   = XLSX.utils.book_new()
-
-      const months = Object.keys(byMonth).sort()
-      if (months.length === 0) {
-        setError('No attendance records found in this date range.'); setLoading(false); return
-      }
 
       months.forEach(month => {
         const [year, mon] = month.split('-')
         const sheetName   = new Date(parseInt(year), parseInt(mon) - 1, 1)
           .toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
-
-        const rows = byMonth[month].map(r => {
-          const intern   = internMap[r.uid]
-          const shiftMap = { morning: 'Morning', mid: 'Mid', gy: 'GY' }
-          return {
-            'Name':      intern?.name  || 'Unknown',
-            'Email':     intern?.email || '—',
-            'Shift':     shiftMap[r.shift] || r.shift || '—',
-            'Date':      r.date || '—',
-            'Time In':   fmt(r.timeIn),
-            'Time Out':  fmt(r.timeOut),
-            'Duration':  r.duration || '—',
-            'Status':    r.timeOut ? (r.status === 'late' ? 'Late' : 'Complete') : 'No Time Out',
-          }
-        })
-
-        const ws = XLSX.utils.json_to_sheet(rows)
-
-        // Column widths
-        ws['!cols'] = [
-          { wch: 22 }, { wch: 26 }, { wch: 10 },
-          { wch: 14 }, { wch: 12 }, { wch: 12 },
-          { wch: 12 }, { wch: 14 },
-        ]
-
-        // Header row bold styling
-        const range = XLSX.utils.decode_range(ws['!ref'])
-        for (let C = range.s.c; C <= range.e.c; C++) {
-          const cell = ws[XLSX.utils.encode_cell({ r: 0, c: C })]
-          if (cell) {
-            cell.s = {
-              font:      { bold: true, name: 'Arial', sz: 11, color: { rgb: 'FFFFFF' } },
-              fill:      { fgColor: { rgb: '1E293B' } },
-              alignment: { horizontal: 'center' },
-            }
-          }
-        }
-
+        const ws = buildDayGroupedSheet(XLSX, byMonth[month], internMap, true)
         XLSX.utils.book_append_sheet(wb, ws, sheetName.slice(0, 31))
       })
 
-      // File name: InfocomOJT_Attendance_2026-01_to_2026-03.xlsx
-      const fileName = `InfocomOJT_Attendance_${dateFrom}_to_${dateTo}.xlsx`
-      XLSX.writeFile(wb, fileName)
+      XLSX.writeFile(wb, `InfocomOJT_Attendance_${dateFrom}_to_${dateTo}.xlsx`)
       onCancel()
     } catch (e) {
       console.error(e)
@@ -389,7 +508,7 @@ function DownloadExcelModal({ interns, onCancel }) {
   return (
     <div className="modal-overlay"><div className="modal">
       <div className="modal-title">📥 Download Attendance</div>
-      <div className="modal-sub">Export attendance records as an Excel file. Each month gets its own sheet.</div>
+      <div className="modal-sub">Export attendance records as an Excel file. Each month gets its own sheet, grouped by day.</div>
       <div className="modal-form">
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           <div className="modal-field">
@@ -403,7 +522,7 @@ function DownloadExcelModal({ interns, onCancel }) {
         </div>
         <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border)', borderRadius: 8, padding: '12px 14px', fontSize: '0.75rem', color: 'var(--muted)', lineHeight: 1.6 }}>
           📊 Records from <strong style={{ color: 'var(--text)' }}>{dateFrom}</strong> to <strong style={{ color: 'var(--text)' }}>{dateTo}</strong> will be exported.<br />
-          Each month will be a separate sheet tab in the Excel file.
+          Each month = one sheet tab. Each day = its own section with a date header.
         </div>
         {error && <div style={{ color: '#ff5f57', fontSize: '0.75rem' }}>{error}</div>}
         <div className="modal-actions">
@@ -422,17 +541,12 @@ function DownloadInternExcelModal({ intern, logs, onCancel }) {
   const [loading, setLoading] = useState(false)
   const [error,   setError]   = useState('')
 
-  const fmt = (ts) => {
-    if (!ts?.toDate) return '—'
-    return ts.toDate().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })
-  }
-
   const handleDownload = async () => {
     if (logs.length === 0) { setError('No attendance records found for this intern.'); return }
     setLoading(true); setError('')
     try {
-      const XLSX = await import('https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs')
-      const wb   = XLSX.utils.book_new()
+      const XLSX     = await import('https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs')
+      const wb       = XLSX.utils.book_new()
       const shiftMap = { morning: 'Morning', mid: 'Mid', gy: 'GY' }
 
       // Group by month
@@ -444,59 +558,29 @@ function DownloadInternExcelModal({ intern, logs, onCancel }) {
         byMonth[month].push(r)
       })
 
-      const months = Object.keys(byMonth).sort()
-
-      months.forEach(month => {
+      Object.keys(byMonth).sort().forEach(month => {
         const [year, mon] = month.split('-')
         const sheetName   = new Date(parseInt(year), parseInt(mon) - 1, 1)
           .toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
 
-        const rows = byMonth[month].map(r => ({
-          'Date':      r.date || '—',
-          'Shift':     shiftMap[r.shift] || r.shift || '—',
-          'Time In':   fmt(r.timeIn),
-          'Time Out':  fmt(r.timeOut),
-          'Duration':  r.duration || '—',
-          'Status':    !r.timeOut ? 'No Time Out' : r.status === 'late' ? 'Late' : 'Complete',
-          'Overtime':  (() => {
-            if (!r.timeOut) return '—'
-            const shiftEnds = { morning: 15, mid: 22, gy: 7 }
-            const endHour   = shiftEnds[r.shift] ?? 15
-            const outHour   = r.timeOut.toDate().getHours()
-            return outHour > endHour ? 'Yes' : 'No'
-          })(),
-        }))
+        // Use shared helper — no name/email col since it's a single intern sheet
+        const ws = buildDayGroupedSheet(XLSX, byMonth[month], null, false)
 
-        const ws = XLSX.utils.json_to_sheet([])
+        // Prepend title rows by shifting existing data down
+        XLSX.utils.sheet_add_aoa(ws, [], { origin: 'A1' }) // no-op to ensure ws is initialized
 
-        // Title rows
-        XLSX.utils.sheet_add_aoa(ws, [
+        // We'll rebuild with title at top
+        const titleAoa = [
           [`Attendance Report — ${intern.name}`],
-          [`${intern.email}  |  Shift: ${shiftMap[intern.shift] || intern.shift}  |  ${sheetName}`],
+          [`${intern.email}   |   Shift: ${shiftMap[intern.shift] || intern.shift}   |   ${sheetName}`],
+          [`Total Days: ${byMonth[month].length}   |   Late: ${byMonth[month].filter(r => r.status === 'late').length}   |   Missing Time Out: ${byMonth[month].filter(r => !r.timeOut).length}`],
           [],
-        ], { origin: 'A1' })
-
-        XLSX.utils.sheet_add_json(ws, rows, { origin: 'A4' })
-
-        // Summary row
-        const dataLen  = rows.length
-        const lastRow  = 4 + dataLen + 1
-        const doneRows = rows.filter(r => r['Status'] === 'Complete' || r['Status'] === 'Late')
-        XLSX.utils.sheet_add_aoa(ws, [
-          [],
-          [`Total Days: ${dataLen}`, '', `Present: ${doneRows.length}`, '', `Missing Time Out: ${rows.filter(r => r['Status'] === 'No Time Out').length}`, '', `Late: ${rows.filter(r => r['Status'] === 'Late').length}`],
-        ], { origin: `A${lastRow}` })
-
-        ws['!cols'] = [{ wch: 14 }, { wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 16 }, { wch: 10 }]
-
-        // Merge title cell
-        ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 6 } }, { s: { r: 1, c: 0 }, e: { r: 1, c: 6 } }]
-
-        XLSX.utils.book_append_sheet(wb, ws, sheetName.slice(0, 31))
+        ]
+        const finalWs = buildDayGroupedSheetWithTitle(XLSX, titleAoa, byMonth[month], false)
+        XLSX.utils.book_append_sheet(wb, finalWs, sheetName.slice(0, 31))
       })
 
-      const fileName = `${intern.name.replace(/\s+/g, '_')}_Attendance.xlsx`
-      XLSX.writeFile(wb, fileName)
+      XLSX.writeFile(wb, `${intern.name.replace(/\s+/g, '_')}_Attendance.xlsx`)
       onCancel()
     } catch (e) {
       console.error(e)
@@ -510,12 +594,11 @@ function DownloadInternExcelModal({ intern, logs, onCancel }) {
   return (
     <div className="modal-overlay"><div className="modal">
       <div className="modal-title">📥 Download {intern.name}'s Attendance</div>
-      <div className="modal-sub">Exports all attendance records for this intern. Each month gets its own sheet.</div>
+      <div className="modal-sub">Each month gets its own sheet, grouped by day.</div>
       <div className="modal-form">
-        {/* Summary of what will be exported */}
         <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border)', borderRadius: 8, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div className="intern-avatar" style={{ width: 36, height: 36, fontSize: '0.75rem', flexShrink: 0 }}>
+            <div className="intern-avatar" style={{ width: 36, height: 36, fontSize: '0.75rem', flexShrink: 0, ...avatarStyle(intern.avatarColor) }}>
               {intern.name?.split(' ').map(n => n[0]).join('').slice(0,2).toUpperCase()}
             </div>
             <div>
@@ -531,11 +614,7 @@ function DownloadInternExcelModal({ intern, logs, onCancel }) {
               </div>
             ))}
           </div>
-          {months.length > 0 && (
-            <div style={{ fontSize: '0.68rem', color: 'var(--muted)' }}>
-              Sheets: {months.map(m => monthLabel(m)).join(', ')}
-            </div>
-          )}
+          {months.length > 0 && <div style={{ fontSize: '0.68rem', color: 'var(--muted)' }}>Sheets: {months.map(m => monthLabel(m)).join(', ')}</div>}
         </div>
         {error && <div style={{ color: '#ff5f57', fontSize: '0.75rem' }}>{error}</div>}
         <div className="modal-actions">
@@ -690,6 +769,7 @@ export default function AdminDashboard({ user, onLogout }) {
   const [interns, setInterns]     = useState([])
   const [tasks, setTasks]         = useState([])
   const [modal, setModal]         = useState(null)
+  const [showTheme, setShowTheme] = useState(false)
   const [selectedIntern, setSelectedIntern]       = useState(null)
   const [selectedTask, setSelectedTask]           = useState(null)
   const [viewingAttendance, setViewingAttendance] = useState(null)
@@ -718,18 +798,22 @@ export default function AdminDashboard({ user, onLogout }) {
 
   useEffect(() => {
     if (!viewingAttendance) return
-    setSelectedMonth('all')
-    getAttendanceLogs(viewingAttendance.uid).then(setAttendanceLogs).catch(console.error)
+    Promise.resolve().then(() => {
+      setSelectedMonth('all')
+      getAttendanceLogs(viewingAttendance.uid).then(setAttendanceLogs).catch(console.error)
+    })
   }, [viewingAttendance])
 
   // Load all attendance logs when attendance tab is opened
   useEffect(() => {
     if (tab !== 'attendance' || viewingAttendance) return
-    setAllLogsLoading(true)
-    getAllAttendanceInRange('2000-01-01', '2099-12-31')
-      .then(setAllLogs)
-      .catch(console.error)
-      .finally(() => setAllLogsLoading(false))
+    Promise.resolve().then(() => {
+      setAllLogsLoading(true)
+      getAllAttendanceInRange('2000-01-01', '2099-12-31')
+        .then(setAllLogs)
+        .catch(console.error)
+        .finally(() => setAllLogsLoading(false))
+    })
   }, [tab, viewingAttendance])
 
   const handleAddIntern = async (form) => {
@@ -804,6 +888,7 @@ export default function AdminDashboard({ user, onLogout }) {
       {modal === 'download-excel-intern' && viewingAttendance && (
         <DownloadInternExcelModal intern={viewingAttendance} logs={attendanceLogs} onCancel={() => setModal(null)} />
       )}
+      {showTheme && <ThemePicker onClose={() => setShowTheme(false)} />}
 
       <header className="admin-topbar">
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -812,6 +897,7 @@ export default function AdminDashboard({ user, onLogout }) {
         </div>
         <div className="admin-topbar-right">
           <span style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>{user?.name || 'Admin'}</span>
+          <button className="btn-logout" style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--muted)', borderColor: 'var(--border)' }} onClick={() => setShowTheme(true)}>🎨 Theme</button>
           <button className="btn-logout" onClick={handleLogout}>⎋ Logout</button>
         </div>
       </header>
@@ -912,6 +998,12 @@ export default function AdminDashboard({ user, onLogout }) {
                   )}
                   {interns
                     .filter(intern => internShiftFilter === 'all' || intern.shift === internShiftFilter)
+                    .sort((a, b) => {
+                      const shiftOrder = { morning: 0, mid: 1, gy: 2 }
+                      const sd = (shiftOrder[a.shift] ?? 3) - (shiftOrder[b.shift] ?? 3)
+                      if (sd !== 0) return sd
+                      return (a.name || '').localeCompare(b.name || '')
+                    })
                     .map(intern => {
                     const internTasks = tasks.filter(t =>
                       (t.type !== 'group' && t.internUid === intern.uid) ||
