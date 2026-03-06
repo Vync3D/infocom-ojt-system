@@ -175,3 +175,19 @@
 [data-theme="minimal-light"] .theme-card {
   border-color: #dde1e7;
 }
+
+/* ══════════════════════════════════════════
+   MOBILE RESPONSIVE — Theme Picker
+   ══════════════════════════════════════════ */
+@media (max-width: 768px) {
+  .theme-picker-panel { padding: 16px 14px 24px; }
+  .theme-card { width: calc(33.333% - 6px); }
+  .theme-preview { height: 52px; }
+  .theme-card-name { font-size: 0.65rem; }
+  .theme-card-desc { display: none; }
+}
+
+@media (max-width: 400px) {
+  .theme-picker-grid { gap: 6px; }
+  .theme-card { width: calc(50% - 4px); }
+}

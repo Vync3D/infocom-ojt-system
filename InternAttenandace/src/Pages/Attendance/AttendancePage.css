@@ -270,3 +270,46 @@
 }
 .btn-download-excel:hover { background: rgba(34,197,94,0.18); border-color: rgba(34,197,94,0.4); }
 .btn-download-excel:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ══════════════════════════════════════════
+   MOBILE RESPONSIVE — Attendance Page
+   ══════════════════════════════════════════ */
+@media (max-width: 768px) {
+  .attendance-page { padding: 16px 12px 80px; }
+  .attendance-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .attendance-header-right { width: 100%; justify-content: space-between; }
+  .att-summary-cards { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .att-summary-card { padding: 14px; }
+
+  /* Table — card layout */
+  .att-page-table-header { display: none; }
+  .att-page-row {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 14px 16px;
+  }
+  .att-page-row-date {
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--text);
+  }
+  .att-page-row-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    font-size: 0.75rem;
+  }
+
+  /* Month filter */
+  .att-filter-row { flex-wrap: wrap; gap: 8px; }
+  .btn-download-excel { font-size: 0.68rem; padding: 6px 10px; }
+}
+
+@media (max-width: 480px) {
+  .att-summary-cards { grid-template-columns: 1fr 1fr; }
+}

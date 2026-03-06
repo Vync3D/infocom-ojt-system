@@ -4,7 +4,11 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   server: {
-    host: true,   // expose to local network
-    port: 5173,   // you can change this if needed
+    host: true,   // for npm run dev
+    port: 5173,
+  },
+  preview: {
+    host: true,   // for npm run preview
+    port: 4173,
   },
 })

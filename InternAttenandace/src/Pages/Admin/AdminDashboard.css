@@ -856,3 +856,221 @@
   padding: 2px 8px;
   border-radius: 100px;
 }
+
+/* ══════════════════════════════════════════
+   MOBILE RESPONSIVE — Admin Dashboard
+   ══════════════════════════════════════════ */
+@media (max-width: 768px) {
+
+  /* ── Topbar ── */
+  .admin-topbar { padding: 0 14px; height: 54px; }
+  .admin-topbar-logo { font-size: 0.9rem; }
+  .admin-role-badge { display: none; }
+  .admin-topbar-right { gap: 5px; }
+  .admin-topbar-right > span { display: none; }
+  .btn-logout { font-size: 0.62rem; padding: 5px 8px; }
+
+  /* ── Body ── */
+  .admin-body { padding: 14px 10px 80px; }
+
+  /* ── Stats ── */
+  .admin-stats { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .admin-stat-card { padding: 12px; }
+  .admin-stat-value { font-size: 1.5rem; }
+  .admin-stat-label { font-size: 0.6rem; }
+
+  /* ── Tabs ── */
+  .admin-tabs {
+    gap: 2px;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    padding-bottom: 2px;
+    -webkit-overflow-scrolling: touch;
+  }
+  .admin-tab { font-size: 0.65rem; padding: 7px 10px; white-space: nowrap; }
+
+  /* ── Card header — stack vertically ── */
+  .admin-card-header {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 12px 14px;
+    gap: 10px;
+  }
+  .admin-card-header > div { width: 100%; flex-wrap: wrap; }
+  .btn-add { font-size: 0.72rem; padding: 7px 14px; }
+
+  /* ── Shift filter buttons ── */
+  .shift-filter-btns { flex-wrap: wrap; gap: 4px; }
+  .shift-filter-btn { font-size: 0.6rem; padding: 4px 8px; }
+
+  /* ══ INTERN CARD LAYOUT ══ */
+  .intern-table-header { display: none !important; }
+  .intern-row {
+    display: grid !important;
+    grid-template-columns: 1fr auto !important;
+    grid-template-rows: auto auto !important;
+    gap: 0 !important;
+    padding: 14px !important;
+    align-items: start !important;
+  }
+
+  /* Top-left: avatar + name + email */
+  .intern-row .intern-name-cell {
+    grid-column: 1;
+    grid-row: 1;
+    gap: 10px;
+    align-items: center;
+  }
+
+  /* Top-right: shift badge stacked with hours */
+  .intern-row .intern-td:first-of-type {
+    grid-column: 2;
+    grid-row: 1;
+    text-align: right;
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--accent);
+  }
+
+  /* Bottom-left: tasks done */
+  .intern-row .intern-td:last-of-type {
+    grid-column: 1;
+    grid-row: 2;
+    margin-top: 8px;
+    font-size: 0.72rem;
+    color: var(--muted);
+  }
+
+  /* Bottom-right: action buttons */
+  .intern-row .intern-actions {
+    grid-column: 2;
+    grid-row: 2;
+    margin-top: 8px;
+    display: flex;
+    gap: 6px;
+    justify-content: flex-end;
+  }
+
+  .intern-avatar { width: 34px !important; height: 34px !important; font-size: 0.65rem !important; flex-shrink: 0 !important; }
+  .intern-name { font-size: 0.82rem; }
+  .intern-email { font-size: 0.63rem; white-space: normal; word-break: break-all; }
+  .btn-icon { font-size: 0.62rem; padding: 4px 8px; }
+
+  /* ══ SOLO TASK CARD LAYOUT ══ */
+  .intern-row[style*="1.5fr"] {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 8px !important;
+    padding: 14px !important;
+    grid-template-columns: unset !important;
+  }
+
+  /* Task title bold on top */
+  .intern-row[style*="1.5fr"] > div:first-child .intern-name {
+    font-size: 0.85rem;
+  }
+
+  /* Intern name + priority + status inline */
+  .intern-row[style*="1.5fr"] .intern-name-cell {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+  }
+
+  /* Priority + status + assigned by in a row */
+  .intern-row[style*="1.5fr"] > div:nth-child(3),
+  .intern-row[style*="1.5fr"] > div:nth-child(4),
+  .intern-row[style*="1.5fr"] > div:nth-child(5) {
+    display: inline-flex;
+  }
+
+  /* ── Task subtabs ── */
+  .task-subtabs { overflow-x: auto; flex-wrap: nowrap; gap: 4px; }
+  .task-subtab { font-size: 0.65rem; padding: 5px 10px; white-space: nowrap; }
+
+  /* ══ ATTENDANCE CARD LAYOUT ══ */
+  .btn-download-excel { font-size: 0.65rem; padding: 6px 10px; white-space: nowrap; }
+  .assign-intern-select { flex-wrap: wrap; gap: 6px; align-items: center; }
+  .assign-select { font-size: 0.7rem; }
+
+  .att-month-filter-row {
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 10px 14px;
+  }
+  .att-month-filter-row > span:last-child { display: none; }
+
+  .att-day-header { padding: 8px 14px 4px; }
+  .att-day-label { font-size: 0.7rem; }
+
+  /* Attendance rows — 2-col card */
+  .intern-row[style*="1.6fr"] {
+    display: grid !important;
+    grid-template-columns: 1fr auto !important;
+    grid-template-rows: auto auto auto !important;
+    gap: 0 !important;
+    padding: 12px 14px !important;
+    align-items: start !important;
+  }
+
+  /* Avatar + name top-left */
+  .intern-row[style*="1.6fr"] .intern-name-cell {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  /* Shift badge top-right */
+  .intern-row[style*="1.6fr"] > div:nth-child(2) {
+    grid-column: 2;
+    grid-row: 1;
+    text-align: right;
+  }
+
+  /* Time in + time out side by side — row 2 */
+  .intern-row[style*="1.6fr"] > div:nth-child(3),
+  .intern-row[style*="1.6fr"] > div:nth-child(4) {
+    grid-row: 2;
+    margin-top: 6px;
+    font-size: 0.75rem;
+  }
+  .intern-row[style*="1.6fr"] > div:nth-child(3) { grid-column: 1; }
+  .intern-row[style*="1.6fr"] > div:nth-child(4) { grid-column: 2; text-align: right; }
+
+  /* Duration + status — row 3 */
+  .intern-row[style*="1.6fr"] > div:nth-child(5),
+  .intern-row[style*="1.6fr"] > div:nth-child(6) {
+    grid-row: 3;
+    margin-top: 4px;
+    font-size: 0.72rem;
+  }
+  .intern-row[style*="1.6fr"] > div:nth-child(5) { grid-column: 1; color: var(--muted); }
+  .intern-row[style*="1.6fr"] > div:nth-child(6) { grid-column: 2; text-align: right; }
+
+  /* ── Settings ── */
+  .shift-settings-grid { grid-template-columns: 1fr !important; }
+
+  /* ── Modals — slide up from bottom ── */
+  .modal-overlay { align-items: flex-end; padding: 0; }
+  .modal {
+    padding: 20px 16px 28px;
+    margin: 0;
+    border-radius: 16px 16px 0 0;
+    max-height: 92vh;
+    overflow-y: auto;
+    width: 100%;
+    max-width: 100%;
+  }
+  .modal-title { font-size: 0.95rem; }
+  .modal-actions { flex-direction: column-reverse; gap: 8px; }
+  .btn-modal-confirm, .btn-modal-cancel { width: 100%; justify-content: center; }
+
+  /* Present now tooltip */
+  .present-tooltip { width: 220px; right: 0; left: auto; }
+}
+
+@media (max-width: 480px) {
+  .admin-tab { font-size: 0.6rem; padding: 6px 8px; }
+  .att-day-count { display: none; }
+  .admin-card { border-radius: 10px; }
+}

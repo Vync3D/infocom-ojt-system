@@ -469,3 +469,72 @@
   gap: 8px;
   align-items: flex-start;
 }
+
+/* ══════════════════════════════════════════
+   MOBILE RESPONSIVE — Student Dashboard
+   ══════════════════════════════════════════ */
+@media (max-width: 768px) {
+
+  /* Topbar */
+  .topbar { padding: 0 14px; height: 54px; }
+  .topbar-logo { font-size: 0.95rem; }
+  .topbar-greeting { display: none; }
+  .topbar-right { gap: 6px; }
+  .btn-logout { font-size: 0.68rem; padding: 5px 10px; }
+
+  /* Body */
+  .dashboard-body { padding: 16px 12px 80px; }
+
+  /* Profile banner */
+  .profile-banner {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+    padding: 16px;
+  }
+  .profile-left { gap: 12px; }
+  .avatar { width: 44px !important; height: 44px !important; font-size: 0.85rem !important; }
+  .profile-name { font-size: 1.1rem; }
+  .hours-progress { min-width: 100%; }
+  .hours-total { width: 100%; }
+
+  /* Main grid — single column */
+  .main-grid { grid-template-columns: 1fr; gap: 14px; }
+
+  /* Clock card */
+  .clock-display { font-size: 2rem; }
+
+  /* Time in/out card */
+  .timein-card { padding: 18px; }
+  .timein-btn { width: 100%; }
+
+  /* Overtime banner */
+  .overtime-banner { margin: 0 12px 12px; font-size: 0.72rem; }
+
+  /* Nav tabs */
+  .dashboard-nav { padding: 0 12px; gap: 4px; overflow-x: auto; }
+  .nav-tab { font-size: 0.72rem; padding: 10px 12px; white-space: nowrap; }
+
+  /* Recent attendance table */
+  .att-table-header { display: none; }
+  .att-row {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 12px 16px;
+  }
+  .att-row > * { font-size: 0.78rem; }
+
+  /* Task list */
+  .task-item { padding: 12px 14px; }
+  .task-title { font-size: 0.82rem; }
+}
+
+@media (max-width: 480px) {
+  .profile-banner { padding: 14px; }
+  .topbar-right .btn-logout:not(:last-child) { 
+    font-size: 0.62rem; 
+    padding: 4px 8px;
+  }
+  .clock-display { font-size: 1.7rem; }
+}

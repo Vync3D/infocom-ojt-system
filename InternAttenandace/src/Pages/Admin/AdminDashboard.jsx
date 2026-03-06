@@ -1228,7 +1228,7 @@ export default function AdminDashboard({ user, onLogout }) {
                   return (
                     <>
                       {/* Month filter for all-logs view */}
-                      <div style={{ padding: '12px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div className="att-month-filter-row" style={{ padding: '12px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 10 }}>
                         <span style={{ fontSize: '0.72rem', color: 'var(--muted)' }}>📅 Month:</span>
                         <select className="assign-select" value={allLogsMonth} onChange={e => setAllLogsMonth(e.target.value)}>
                           <option value="all">All Time</option>

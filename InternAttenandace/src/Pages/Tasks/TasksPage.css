@@ -292,3 +292,30 @@
   border-radius: 6px;
   display: inline-block;
 }
+
+/* ══════════════════════════════════════════
+   MOBILE RESPONSIVE — Tasks Page
+   ══════════════════════════════════════════ */
+@media (max-width: 768px) {
+  .tasks-page { padding: 16px 12px 80px; }
+  .tasks-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .task-filters { flex-wrap: wrap; gap: 6px; }
+  .task-filter-btn { font-size: 0.68rem; padding: 5px 10px; }
+
+  /* Task cards */
+  .task-card { padding: 14px; }
+  .task-card-header { flex-wrap: wrap; gap: 8px; }
+  .task-card-title { font-size: 0.88rem; }
+  .task-card-meta { flex-wrap: wrap; gap: 6px; }
+
+  /* Group task members */
+  .member-avatars { flex-wrap: wrap; }
+}
+
+@media (max-width: 480px) {
+  .task-card { padding: 12px; }
+}
