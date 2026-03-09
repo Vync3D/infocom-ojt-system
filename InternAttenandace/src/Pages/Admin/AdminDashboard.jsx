@@ -82,7 +82,13 @@ function AddInternModal({ onAdd, onCancel, shiftSettings }) {
   const [created, setCreated] = useState(null) // holds { name, email, password } after success
   const [copied, setCopied]   = useState(false)
 
-  const handleChange = e => setForm(p => ({ ...p, [e.target.name]: e.target.value }))
+  const handleChange = e => {
+    const { name, value } = e.target
+    const formatted = (name === 'firstName' || name === 'lastName')
+      ? value.replace(/\b\w/g, c => c.toUpperCase())
+      : value
+    setForm(p => ({ ...p, [name]: formatted }))
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault(); setLoading(true); setError('')
@@ -136,8 +142,8 @@ function AddInternModal({ onAdd, onCancel, shiftSettings }) {
       <form className="modal-form" onSubmit={handleSubmit}>
         {/* Split name fields */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-          <div className="modal-field"><label>First Name</label><input name="firstName" placeholder="e.g. Maria" value={form.firstName} onChange={handleChange} required /></div>
-          <div className="modal-field"><label>Last Name</label><input name="lastName" placeholder="e.g. Santos" value={form.lastName} onChange={handleChange} required /></div>
+          <div className="modal-field"><label>First Name</label><input name="firstName" placeholder="e.g. Maria" value={form.firstName} onChange={handleChange} autoCapitalize="words" required /></div>
+          <div className="modal-field"><label>Last Name</label><input name="lastName" placeholder="e.g. Santos" value={form.lastName} onChange={handleChange} autoCapitalize="words" required /></div>
         </div>
         <div className="modal-field"><label>Email</label><input name="email" type="email" placeholder="e.g. maria@email.com" value={form.email} onChange={handleChange} required /></div>
         {/* Auto-generated password */}
@@ -188,7 +194,7 @@ function AssignSoloModal({ interns, onAssign, onCancel }) {
           </select>
         </div>
         <div className="modal-field"><label>Task Title</label><input name="title" placeholder="e.g. Fix login bug" value={form.title} onChange={handleChange} required /></div>
-        <div className="modal-field"><label>Description</label><input name="desc" placeholder="Task details..." value={form.desc} onChange={handleChange} /></div>
+        <div className="modal-field"><label>Description</label><textarea name="desc" placeholder="Task details... (full instructions, context, deliverables)" value={form.desc} onChange={handleChange} rows={5} style={{ resize: 'vertical', minHeight: 110 }} /></div>
         <div className="modal-field">
           <label>Priority</label>
           <select name="priority" value={form.priority} onChange={handleChange}>
@@ -241,7 +247,7 @@ function AssignGroupModal({ interns, onAssign, onCancel }) {
       <div className="modal-sub">Assign a task to multiple interns. Only the leader can update the status.</div>
       <form className="modal-form" onSubmit={handleSubmit}>
         <div className="modal-field"><label>Task Title</label><input placeholder="e.g. Sprint 1 Feature Build" value={title} onChange={e => setTitle(e.target.value)} required /></div>
-        <div className="modal-field"><label>Description</label><input placeholder="Task details..." value={desc} onChange={e => setDesc(e.target.value)} /></div>
+        <div className="modal-field"><label>Description</label><textarea placeholder="Task details... (full instructions, context, deliverables)" value={desc} onChange={e => setDesc(e.target.value)} rows={5} style={{ resize: 'vertical', minHeight: 110 }} /></div>
         <div className="modal-field">
           <label>Priority</label>
           <select value={priority} onChange={e => setPriority(e.target.value)}>
@@ -457,7 +463,7 @@ function buildDayGroupedSheet(XLSX, monthRecords, internMap, includeNameCol = tr
   return ws
 }
 
-function DownloadExcelModal({ interns, onCancel }) {
+function DownloadExcelModal({ interns, shiftSettings, onCancel }) {
   const today     = new Date().toISOString().split('T')[0]
   const monthAgo  = new Date(); monthAgo.setMonth(monthAgo.getMonth() - 1)
   const [dateFrom, setDateFrom] = useState(monthAgo.toISOString().split('T')[0])
@@ -473,26 +479,86 @@ function DownloadExcelModal({ interns, onCancel }) {
       const internMap = {}
       interns.forEach(i => { internMap[i.uid] = i })
 
-      // Group by month
-      const byMonth = {}
+      // Group by date
+      const byDate = {}
       records.forEach(r => {
-        const month = r.date?.slice(0, 7)
-        if (!month) return
-        if (!byMonth[month]) byMonth[month] = []
-        byMonth[month].push(r)
+        if (!r.date) return
+        if (!byDate[r.date]) byDate[r.date] = []
+        byDate[r.date].push(r)
       })
 
-      const months = Object.keys(byMonth).sort()
-      if (months.length === 0) { setError('No attendance records found in this date range.'); setLoading(false); return }
+      const dates = Object.keys(byDate).sort((a, b) => b.localeCompare(a)) // newest first
+      if (dates.length === 0) { setError('No attendance records found in this date range.'); setLoading(false); return }
 
-      const XLSX = await import('https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs')
-      const wb   = XLSX.utils.book_new()
+      const XLSX     = await import('https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs')
+      const wb       = XLSX.utils.book_new()
+      const fmt      = ts => ts?.toDate ? ts.toDate().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }) : '—'
+      const shiftMap = { morning: 'Morning', mid: 'Mid', gy: 'GY' }
+      const COLS     = ['Name', 'Email', 'Schedule', 'Time In', 'Time Out', 'Duration', 'Status']
 
-      months.forEach(month => {
-        const [year, mon] = month.split('-')
-        const sheetName   = new Date(parseInt(year), parseInt(mon) - 1, 1)
-          .toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
-        const ws = buildDayGroupedSheet(XLSX, byMonth[month], internMap, true)
+      dates.forEach(date => {
+        const dayRecs  = byDate[date].sort((a, b) => (a.timeIn?.toDate?.()?.getTime() || 0) - (b.timeIn?.toDate?.()?.getTime() || 0))
+        const dateLabel = new Date(date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
+        // Sheet name: "Mon, Mar 6" (max 31 chars)
+        const sheetName = new Date(date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+
+        const aoa    = []
+        const merges = []
+        const styles = {}
+
+        // Date title row
+        aoa.push([`${dateLabel}   (${dayRecs.length} record${dayRecs.length !== 1 ? 's' : ''})`, '', '', '', '', '', ''])
+        merges.push({ s: { r: 0, c: 0 }, e: { r: 0, c: 6 } })
+        styles[0] = 'date-header'
+
+        // Column headers
+        aoa.push(COLS)
+        styles[1] = 'col-header'
+
+        // Data rows
+        dayRecs.forEach(r => {
+          const intern   = internMap[r.uid]
+          const status   = !r.timeOut ? 'No Time Out' : r.status === 'late' ? 'Late' : 'Complete'
+          const schedule = (() => {
+            const sc = shiftSettings[r.shift]
+            if (!sc) return shiftMap[r.shift] || r.shift || '—'
+            return `${to12Hour(sc.start)} – ${to12Hour(sc.end)}`
+          })()
+          const rowIdx = aoa.length
+          aoa.push([intern?.name || 'Unknown', intern?.email || '—', schedule, fmt(r.timeIn), fmt(r.timeOut), r.duration || '—', status])
+          styles[rowIdx] = status === 'No Time Out' ? 'data-warning' : status === 'Late' ? 'data-late' : 'data'
+        })
+
+        // Summary row
+        const present  = dayRecs.filter(r => r.timeOut).length
+        const missing  = dayRecs.filter(r => !r.timeOut).length
+        const late     = dayRecs.filter(r => r.status === 'late').length
+        aoa.push([])
+        aoa.push([`Total: ${dayRecs.length}`, '', `Present: ${present}`, '', `Missing Time Out: ${missing}`, '', `Late: ${late}`])
+        styles[aoa.length - 1] = 'summary'
+
+        const ws = XLSX.utils.aoa_to_sheet(aoa)
+
+        // Apply styles
+        aoa.forEach((_, rowIdx) => {
+          const type = styles[rowIdx]
+          if (!type) return
+          for (let c = 0; c < 7; c++) {
+            const addr = XLSX.utils.encode_cell({ r: rowIdx, c })
+            if (!ws[addr]) ws[addr] = { v: '', t: 's' }
+            const cell = ws[addr]
+            if (type === 'date-header') cell.s = { font: { bold: true, sz: 12, color: { rgb: 'FFFFFF' }, name: 'Arial' }, fill: { fgColor: { rgb: '0F172A' } } }
+            else if (type === 'col-header') cell.s = { font: { bold: true, sz: 9, color: { rgb: 'A0AEC0' }, name: 'Arial' }, fill: { fgColor: { rgb: '1E293B' } }, alignment: { horizontal: 'center' } }
+            else if (type === 'data-warning') cell.s = { font: { sz: 10, color: { rgb: 'F59E0B' }, name: 'Arial' }, fill: { fgColor: { rgb: '292318' } } }
+            else if (type === 'data-late') cell.s = { font: { sz: 10, color: { rgb: 'EF4444' }, name: 'Arial' } }
+            else if (type === 'summary') cell.s = { font: { bold: true, sz: 9, color: { rgb: '94A3B8' }, name: 'Arial' } }
+            else cell.s = { font: { sz: 10, name: 'Arial' } }
+          }
+        })
+
+        ws['!merges'] = merges
+        ws['!cols']   = [{ wch: 22 }, { wch: 26 }, { wch: 18 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 14 }]
+
         XLSX.utils.book_append_sheet(wb, ws, sheetName.slice(0, 31))
       })
 
@@ -508,7 +574,7 @@ function DownloadExcelModal({ interns, onCancel }) {
   return (
     <div className="modal-overlay"><div className="modal">
       <div className="modal-title">📥 Download Attendance</div>
-      <div className="modal-sub">Export attendance records as an Excel file. Each month gets its own sheet, grouped by day.</div>
+      <div className="modal-sub">Export attendance records as an Excel file. Each day gets its own sheet tab.</div>
       <div className="modal-form">
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           <div className="modal-field">
@@ -522,7 +588,7 @@ function DownloadExcelModal({ interns, onCancel }) {
         </div>
         <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border)', borderRadius: 8, padding: '12px 14px', fontSize: '0.75rem', color: 'var(--muted)', lineHeight: 1.6 }}>
           📊 Records from <strong style={{ color: 'var(--text)' }}>{dateFrom}</strong> to <strong style={{ color: 'var(--text)' }}>{dateTo}</strong> will be exported.<br />
-          Each month = one sheet tab. Each day = its own section with a date header.
+          Each day = one sheet tab (e.g. "Mon, Mar 6"). Includes name, schedule, times, duration, and status.
         </div>
         {error && <div style={{ color: '#ff5f57', fontSize: '0.75rem' }}>{error}</div>}
         <div className="modal-actions">
@@ -778,6 +844,7 @@ export default function AdminDashboard({ user, onLogout }) {
   const [todayAttendance, setTodayAttendance]     = useState([])
   const [selectedMonth, setSelectedMonth]         = useState('all')
   const [hoveredTaskId, setHoveredTaskId]         = useState(null)
+  const [expandedTaskId, setExpandedTaskId]       = useState(null)
   const [internShiftFilter, setInternShiftFilter] = useState('all')
   const [editingLog, setEditingLog]               = useState(null)
   const [allLogs, setAllLogs]                     = useState([])
@@ -884,7 +951,7 @@ export default function AdminDashboard({ user, onLogout }) {
         </div></div>
       )}
       {editingLog && <EditAttendanceModal log={editingLog.log} onSave={handleEditAttendance} onCancel={() => setEditingLog(null)} />}
-      {modal === 'download-excel' && <DownloadExcelModal interns={interns} onCancel={() => setModal(null)} />}
+      {modal === 'download-excel' && <DownloadExcelModal interns={interns} shiftSettings={shiftSettings} onCancel={() => setModal(null)} />}
       {modal === 'download-excel-intern' && viewingAttendance && (
         <DownloadInternExcelModal intern={viewingAttendance} logs={attendanceLogs} onCancel={() => setModal(null)} />
       )}
@@ -950,7 +1017,7 @@ export default function AdminDashboard({ user, onLogout }) {
 
         {/* Main Tabs */}
         <div className="admin-tabs">
-          {[['interns','👥 Interns'],['tasks','✅ Tasks'],['attendance','◷ Attendance'],['settings','⚙️ Settings']].map(([key, label]) => (
+          {[['interns','👥 Interns'],['tasks','✅ Tasks'],['attendance','◷ Attendance'],['settings','📅 Schedule']].map(([key, label]) => (
             <button key={key} className={`admin-tab ${tab === key ? 'active' : ''}`}
               onClick={() => { setTab(key); setViewingAttendance(null) }}>{label}</button>
           ))}
@@ -984,8 +1051,9 @@ export default function AdminDashboard({ user, onLogout }) {
                     <button className="btn-add" onClick={() => setModal('add')}>+ Add Intern</button>
                   </div>
                 </div>
-                <div className="intern-table-header">
+                <div className="intern-table-header" style={{ gridTemplateColumns: '2fr 1.4fr 1fr 1fr 1fr' }}>
                   <div className="intern-th">Intern</div>
+                  <div className="intern-th">Schedule</div>
                   <div className="intern-th">Hours Rendered</div>
                   <div className="intern-th">Tasks</div>
                   <div className="intern-th">Actions</div>
@@ -1011,22 +1079,18 @@ export default function AdminDashboard({ user, onLogout }) {
                     )
                     const done = internTasks.filter(t => t.status === 'done').length
                     return (
-                      <div className="intern-row" key={intern.uid}>
+                      <div className="intern-row" key={intern.uid} style={{ gridTemplateColumns: '2fr 1.4fr 1fr 1fr 1fr' }}>
                         <div className="intern-name-cell">
                           <div className="intern-avatar" style={avatarStyle(intern.avatarColor)}>{getInitials(intern.name)}</div>
                           <div>
                             <div className="intern-name">{intern.name}</div>
-                            <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginTop: '2px' }}>
-                              <div className="intern-email">{intern.email}</div>
-                              <span style={{
-                                fontSize: '0.58rem', padding: '1px 6px', borderRadius: '100px',
-                                textTransform: 'uppercase', letterSpacing: '0.07em', fontWeight: 600,
-                                background: intern.shift === 'gy' ? 'rgba(0,120,255,0.08)' : intern.shift === 'mid' ? 'rgba(245,158,11,0.08)' : 'rgba(0,229,160,0.08)',
-                                color: intern.shift === 'gy' ? 'var(--accent2)' : intern.shift === 'mid' ? '#f59e0b' : 'var(--accent)',
-                                border: intern.shift === 'gy' ? '1px solid rgba(0,120,255,0.2)' : intern.shift === 'mid' ? '1px solid rgba(245,158,11,0.2)' : '1px solid rgba(0,229,160,0.2)',
-                              }}>{intern.shift === 'gy' ? '🌙 GY' : intern.shift === 'mid' ? '🌤️ Mid' : '🌅 Morning'}</span>
-                            </div>
+                            <div className="intern-email">{intern.email}</div>
                           </div>
+                        </div>
+                        <div>
+                          <span className="intern-schedule-badge">
+                            🕐 {to12Hour(shiftSettings[intern.shift]?.start || '07:00')} – {to12Hour(shiftSettings[intern.shift]?.end || '15:00')}
+                          </span>
                         </div>
                         <div className="intern-td">{Math.floor(intern.hoursRendered || 0)} hrs</div>
                         <div className="intern-td">{done}/{internTasks.length} done</div>
@@ -1076,23 +1140,33 @@ export default function AdminDashboard({ user, onLogout }) {
                     <div className="intern-rows">
                       {soloTasks.length === 0 && <div style={{ padding: '48px 24px', textAlign: 'center', color: 'var(--muted)', fontSize: '0.8rem' }}>No solo tasks yet.</div>}
                       {soloTasks.map(task => {
-                        const intern = interns.find(i => i.uid === task.internUid)
+                        const intern   = interns.find(i => i.uid === task.internUid)
+                        const expanded = expandedTaskId === task.id
                         return (
-                          <div className="intern-row" key={task.id} style={{ gridTemplateColumns: '1.5fr 1.2fr 0.8fr 0.8fr 0.8fr 0.5fr' }}>
-                            <div>
-                              <div className="intern-name" style={{ fontSize: '0.85rem' }}>{task.title}</div>
-                              {task.desc && <div className="intern-email">{task.desc.slice(0, 50)}{task.desc.length > 50 ? '...' : ''}</div>}
+                          <div key={task.id}>
+                            <div className="intern-row task-row-clickable" style={{ gridTemplateColumns: '1.5fr 1.2fr 0.8fr 0.8fr 0.8fr 0.5fr' }}
+                              onClick={() => setExpandedTaskId(expanded ? null : task.id)}>
+                              <div>
+                                <div className="intern-name" style={{ fontSize: '0.85rem' }}>{task.title}</div>
+                                {task.desc && !expanded && <div className="intern-email task-desc-preview">{task.desc.slice(0, 60)}{task.desc.length > 60 ? '…' : ''}</div>}
+                              </div>
+                              <div className="intern-name-cell">
+                                <div className="intern-avatar" style={{ width: 28, height: 28, fontSize: '0.65rem', ...avatarStyle(intern?.avatarColor) }}>{getInitials(intern?.name)}</div>
+                                <span className="intern-td">{intern?.name || 'Unknown'}</span>
+                              </div>
+                              <div><span className={`priority-tag ${task.priority}`}>{PRIORITY_LABELS[task.priority]}</span></div>
+                              <div><span className={`status-tag ${task.status}`}>{STATUS_LABELS[task.status]}</span></div>
+                              <div className="intern-td muted">{task.assignedBy}</div>
+                              <div onClick={e => e.stopPropagation()}>
+                                <button className="btn-icon danger" onClick={() => { setSelectedTask(task); setModal('confirm-delete-task') }}>✕</button>
+                              </div>
                             </div>
-                            <div className="intern-name-cell">
-                              <div className="intern-avatar" style={{ width: 28, height: 28, fontSize: '0.65rem', ...avatarStyle(intern?.avatarColor) }}>{getInitials(intern?.name)}</div>
-                              <span className="intern-td">{intern?.name || 'Unknown'}</span>
-                            </div>
-                            <div><span className={`priority-tag ${task.priority}`}>{PRIORITY_LABELS[task.priority]}</span></div>
-                            <div><span className={`status-tag ${task.status}`}>{STATUS_LABELS[task.status]}</span></div>
-                            <div className="intern-td muted">{task.assignedBy}</div>
-                            <div>
-                              <button className="btn-icon danger" onClick={() => { setSelectedTask(task); setModal('confirm-delete-task') }}>✕</button>
-                            </div>
+                            {expanded && task.desc && (
+                              <div className="task-desc-expanded">
+                                <div className="task-desc-label">📋 Task Description</div>
+                                <div className="task-desc-full">{task.desc}</div>
+                              </div>
+                            )}
                           </div>
                         )
                       })}
@@ -1115,55 +1189,66 @@ export default function AdminDashboard({ user, onLogout }) {
                       {groupTasks.map(task => {
                         const leader  = interns.find(i => i.uid === task.leaderUid)
                         const members = (task.memberUids || []).map(uid => interns.find(i => i.uid === uid)).filter(Boolean)
+                        const expanded = expandedTaskId === task.id
                         return (
-                          <div className="intern-row" key={task.id} style={{ gridTemplateColumns: '1.5fr 1.2fr 1fr 0.8fr 0.5fr' }}>
-                            <div>
-                              <div className="intern-name" style={{ fontSize: '0.85rem' }}>{task.title}</div>
-                              {task.desc && <div className="intern-email">{task.desc.slice(0, 50)}{task.desc.length > 50 ? '...' : ''}</div>}
-                              <span className={`priority-tag ${task.priority}`} style={{ marginTop: 6, display: 'inline-block' }}>{PRIORITY_LABELS[task.priority]}</span>
-                            </div>
-                            <div className="intern-name-cell">
-                              <div className="intern-avatar" style={{ width: 28, height: 28, fontSize: '0.65rem', ...avatarStyle(leader?.avatarColor) }}>{getInitials(leader?.name)}</div>
+                          <div key={task.id}>
+                            <div className="intern-row task-row-clickable" style={{ gridTemplateColumns: '1.5fr 1.2fr 1fr 0.8fr 0.5fr' }}
+                              onClick={() => setExpandedTaskId(expanded ? null : task.id)}>
                               <div>
-                                <div className="intern-td">{leader?.name || 'Unknown'}</div>
-                                <div className="intern-email">Leader</div>
+                                <div className="intern-name" style={{ fontSize: '0.85rem' }}>{task.title}</div>
+                                {task.desc && !expanded && <div className="intern-email task-desc-preview">{task.desc.slice(0, 60)}{task.desc.length > 60 ? '…' : ''}</div>}
+                                <span className={`priority-tag ${task.priority}`} style={{ marginTop: 6, display: 'inline-block' }}>{PRIORITY_LABELS[task.priority]}</span>
                               </div>
-                            </div>
-                            {/* Member avatars with hover tooltip */}
-                            <div
-                              className="member-avatars-wrap"
-                              onMouseEnter={() => setHoveredTaskId(task.id)}
-                              onMouseLeave={() => setHoveredTaskId(null)}
-                            >
-                              <div className="member-avatars">
-                                {members.slice(0, 4).map((m, idx) => (
-                                  <div key={m.uid} className="member-avatar-stack" style={{ zIndex: 10 - idx, ...avatarStyle(m.avatarColor) }}>{getInitials(m.name)}</div>
-                                ))}
-                                {members.length > 4 && <div className="member-avatar-stack more">+{members.length - 4}</div>}
-                                <span className="intern-td" style={{ marginLeft: 8 }}>{members.length}</span>
-                              </div>
-                              {hoveredTaskId === task.id && (
-                                <div className="members-tooltip">
-                                  <div className="present-tooltip-title">Group Members</div>
-                                  {members.map(m => (
-                                    <div className="present-tooltip-row" key={m.uid}>
-                                      <div className="present-tooltip-avatar" style={avatarStyle(m.avatarColor)}>{getInitials(m.name)}</div>
-                                      <div>
-                                        <div className="present-tooltip-name">
-                                          {m.name}
-                                          {m.uid === task.leaderUid && <span style={{ color: 'var(--accent)', fontSize: '0.6rem', marginLeft: 6 }}>👑 Leader</span>}
-                                        </div>
-                                        <div className="present-tooltip-time">{m.email}</div>
-                                      </div>
-                                    </div>
-                                  ))}
+                              <div className="intern-name-cell">
+                                <div className="intern-avatar" style={{ width: 28, height: 28, fontSize: '0.65rem', ...avatarStyle(leader?.avatarColor) }}>{getInitials(leader?.name)}</div>
+                                <div>
+                                  <div className="intern-td">{leader?.name || 'Unknown'}</div>
+                                  <div className="intern-email">Leader</div>
                                 </div>
-                              )}
+                              </div>
+                              {/* Member avatars with hover tooltip */}
+                              <div
+                                className="member-avatars-wrap"
+                                onMouseEnter={() => setHoveredTaskId(task.id)}
+                                onMouseLeave={() => setHoveredTaskId(null)}
+                                onClick={e => e.stopPropagation()}
+                              >
+                                <div className="member-avatars">
+                                  {members.slice(0, 4).map((m, idx) => (
+                                    <div key={m.uid} className="member-avatar-stack" style={{ zIndex: 10 - idx, ...avatarStyle(m.avatarColor) }}>{getInitials(m.name)}</div>
+                                  ))}
+                                  {members.length > 4 && <div className="member-avatar-stack more">+{members.length - 4}</div>}
+                                  <span className="intern-td" style={{ marginLeft: 8 }}>{members.length}</span>
+                                </div>
+                                {hoveredTaskId === task.id && (
+                                  <div className="members-tooltip">
+                                    <div className="present-tooltip-title">Group Members</div>
+                                    {members.map(m => (
+                                      <div className="present-tooltip-row" key={m.uid}>
+                                        <div className="present-tooltip-avatar" style={avatarStyle(m.avatarColor)}>{getInitials(m.name)}</div>
+                                        <div>
+                                          <div className="present-tooltip-name">
+                                            {m.name}
+                                            {m.uid === task.leaderUid && <span style={{ color: 'var(--accent)', fontSize: '0.6rem', marginLeft: 6 }}>👑 Leader</span>}
+                                          </div>
+                                          <div className="present-tooltip-time">{m.email}</div>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                              <div><span className={`status-tag ${task.status}`}>{STATUS_LABELS[task.status]}</span></div>
+                              <div onClick={e => e.stopPropagation()}>
+                                <button className="btn-icon danger" onClick={() => { setSelectedTask(task); setModal('confirm-delete-task') }}>✕</button>
+                              </div>
                             </div>
-                            <div><span className={`status-tag ${task.status}`}>{STATUS_LABELS[task.status]}</span></div>
-                            <div>
-                              <button className="btn-icon danger" onClick={() => { setSelectedTask(task); setModal('confirm-delete-task') }}>✕</button>
-                            </div>
+                            {expanded && task.desc && (
+                              <div className="task-desc-expanded">
+                                <div className="task-desc-label">📋 Task Description</div>
+                                <div className="task-desc-full">{task.desc}</div>
+                              </div>
+                            )}
                           </div>
                         )
                       })}
@@ -1254,9 +1339,9 @@ export default function AdminDashboard({ user, onLogout }) {
                               <span className="att-day-count">{dayRecs.length} record{dayRecs.length !== 1 ? 's' : ''}</span>
                             </div>
                             {/* Column header (only on first date) */}
-                            <div className="intern-table-header" style={{ gridTemplateColumns: '1.6fr 0.7fr 1fr 1fr 0.9fr 0.6fr' }}>
+                            <div className="intern-table-header" style={{ gridTemplateColumns: '1.6fr 1.1fr 1fr 1fr 0.9fr 0.6fr' }}>
                               <div className="intern-th">Intern</div>
-                              <div className="intern-th">Shift</div>
+                              <div className="intern-th">Schedule</div>
                               <div className="intern-th">Time In</div>
                               <div className="intern-th">Time Out</div>
                               <div className="intern-th">Duration</div>
@@ -1267,11 +1352,11 @@ export default function AdminDashboard({ user, onLogout }) {
                               const timeInStr  = rec.timeIn?.toDate  ? rec.timeIn.toDate().toLocaleTimeString('en-US',  { hour: '2-digit', minute: '2-digit', hour12: true }) : '—'
                               const timeOutStr = rec.timeOut?.toDate ? rec.timeOut.toDate().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }) : '—'
                               const incomplete = rec.timeIn && !rec.timeOut
-                              const shiftColors = { morning: { bg: 'rgba(0,229,160,0.08)', color: 'var(--accent)', border: '1px solid rgba(0,229,160,0.2)' }, mid: { bg: 'rgba(245,158,11,0.08)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.2)' }, gy: { bg: 'rgba(0,120,255,0.08)', color: 'var(--accent2)', border: '1px solid rgba(0,120,255,0.2)' } }
-                              const sc         = shiftColors[rec.shift] || shiftColors.morning
+                              const sc         = shiftSettings[rec.shift]
+                              const scheduleStr = sc ? `${to12Hour(sc.start)} – ${to12Hour(sc.end)}` : (rec.shift || '—')
                               return (
                                 <div key={i} className={`intern-row ${incomplete ? 'row-incomplete' : ''}`}
-                                  style={{ gridTemplateColumns: '1.6fr 0.7fr 1fr 1fr 0.9fr 0.6fr', cursor: 'pointer' }}
+                                  style={{ gridTemplateColumns: '1.6fr 1.1fr 1fr 1fr 0.9fr 0.6fr', cursor: 'pointer' }}
                                   onClick={() => setViewingAttendance(intern)}
                                 >
                                   <div className="intern-name-cell">
@@ -1282,8 +1367,8 @@ export default function AdminDashboard({ user, onLogout }) {
                                     </div>
                                   </div>
                                   <div>
-                                    <span style={{ fontSize: '0.6rem', padding: '2px 6px', borderRadius: '100px', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600, background: sc.bg, color: sc.color, border: sc.border }}>
-                                      {rec.shift === 'gy' ? '🌙 GY' : rec.shift === 'mid' ? '🌤️ Mid' : '🌅 AM'}
+                                    <span className="intern-schedule-badge" style={{ fontSize: '0.65rem' }}>
+                                      🕐 {scheduleStr}
                                     </span>
                                   </div>
                                   <div className="intern-td" style={{ color: 'var(--accent)' }}>↓ {timeInStr}</div>

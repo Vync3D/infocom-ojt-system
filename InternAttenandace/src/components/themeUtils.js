@@ -37,7 +37,7 @@ export function applyTheme(themeId) {
 }
 
 export function loadSavedTheme() {
-  const saved = localStorage.getItem('ojt-theme') || 'cyber'
+  const saved = localStorage.getItem('ojt-theme') || 'minimal-light'
   document.documentElement.setAttribute('data-theme', saved)
   return saved
 }

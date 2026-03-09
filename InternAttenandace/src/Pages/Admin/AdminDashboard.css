@@ -26,8 +26,9 @@
   justify-content: space-between;
   padding: 0 32px;
   height: 60px;
-  background: rgba(10,12,15,0.9);
+  background: var(--surface);
   backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
 }
 .admin-topbar-logo {
@@ -154,9 +155,9 @@
 /* ── INTERN TABLE ── */
 .intern-table-header {
   display: grid;
-  grid-template-columns: 2fr 1.2fr 1fr 1fr 1fr 0.8fr;
+  grid-template-columns: 2fr 1.4fr 1fr 1fr 1fr;
   padding: 10px 24px;
-  background: rgba(0,0,0,0.2);
+  background: var(--surface2);
   border-bottom: 1px solid var(--border);
 }
 .intern-th {
@@ -168,14 +169,14 @@
 .intern-rows { display: flex; flex-direction: column; }
 .intern-row {
   display: grid;
-  grid-template-columns: 2fr 1.2fr 1fr 1fr 1fr 0.8fr;
+  grid-template-columns: 2fr 1.4fr 1fr 1fr 1fr;
   padding: 14px 24px;
   border-bottom: 1px solid var(--border);
   align-items: center;
   transition: background 0.15s;
 }
 .intern-row:last-child { border-bottom: none; }
-.intern-row:hover { background: rgba(255,255,255,0.02); }
+.intern-row:hover { background: rgba(0,0,0,0.015); }
 
 .intern-name-cell {
   display: flex;
@@ -198,6 +199,19 @@
 }
 .intern-name { font-family: var(--font-display); font-size: 0.88rem; font-weight: 600; }
 .intern-email { font-size: 0.68rem; color: var(--muted); margin-top: 1px; }
+.intern-schedule-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.68rem;
+  color: var(--accent);
+  background: rgba(0,0,0,0.03);
+  border: 1px solid var(--border);
+  padding: 2px 8px;
+  border-radius: 100px;
+  white-space: nowrap;
+  font-weight: 500;
+}
 
 .intern-td { font-size: 0.78rem; color: var(--text); }
 .intern-td.muted { color: var(--muted); }
@@ -218,7 +232,7 @@
   gap: 6px;
 }
 .btn-icon {
-  background: rgba(255,255,255,0.04);
+  background: rgba(0,0,0,0.03);
   border: 1px solid var(--border);
   color: var(--muted);
   padding: 5px 10px;
@@ -269,7 +283,7 @@
   padding: 32px;
   width: 100%;
   max-width: 480px;
-  box-shadow: 0 40px 80px rgba(0,0,0,0.6);
+  box-shadow: 0 40px 80px rgba(0,0,0,0.15);
   animation: fadeUp 0.3s ease both;
 }
 .modal-title {
@@ -294,7 +308,7 @@
 }
 .modal-field input, .modal-field select {
   width: 100%;
-  background: rgba(255,255,255,0.03);
+  background: rgba(0,0,0,0.02);
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 10px 12px;
@@ -347,7 +361,7 @@
   flex-wrap: wrap;
 }
 .assign-select {
-  background: rgba(255,255,255,0.03);
+  background: rgba(0,0,0,0.02);
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 7px 12px;
@@ -367,7 +381,7 @@
   gap: 12px;
   padding: 20px 24px;
   border-bottom: 1px solid var(--border);
-  background: rgba(0,0,0,0.15);
+  background: var(--surface2);
 }
 .attendance-intern-name {
   font-family: var(--font-display);
@@ -394,7 +408,7 @@
 .task-subtabs {
   display: flex;
   gap: 4px;
-  background: rgba(0,0,0,0.2);
+  background: var(--surface2);
   border: 1px solid var(--border);
   border-radius: 7px;
   padding: 3px;
@@ -419,7 +433,7 @@
 }
 .task-subtab:hover:not(.active) { color: var(--text); }
 .subtab-count {
-  background: rgba(255,255,255,0.06);
+  background: rgba(0,0,0,0.04);
   border: 1px solid var(--border);
   border-radius: 100px;
   padding: 1px 7px;
@@ -448,7 +462,7 @@
   padding: 8px 12px;
   border-radius: 8px;
   border: 1px solid var(--border);
-  background: rgba(255,255,255,0.02);
+  background: rgba(0,0,0,0.015);
   cursor: pointer;
   font-size: 0.8rem;
   color: var(--muted);
@@ -526,7 +540,7 @@
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 14px;
-  box-shadow: 0 16px 40px rgba(0,0,0,0.5);
+  box-shadow: 0 16px 40px rgba(0,0,0,0.12);
   z-index: 200;
   animation: fadeIn 0.15s ease both;
 }
@@ -619,7 +633,7 @@
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 14px;
-  box-shadow: 0 16px 40px rgba(0,0,0,0.6);
+  box-shadow: 0 16px 40px rgba(0,0,0,0.14);
   z-index: 9999;
   pointer-events: none;
 }
@@ -656,7 +670,7 @@
 
 /* ── CREDENTIALS BOX (after intern created) ── */
 .credentials-box {
-  background: rgba(0,0,0,0.3);
+  background: rgba(0,0,0,0.06);
   border: 1px solid var(--border);
   border-radius: 10px;
   overflow: hidden;
@@ -751,7 +765,7 @@
 }
 .shift-field input {
   width: 100%;
-  background: rgba(255,255,255,0.03);
+  background: rgba(0,0,0,0.02);
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 8px 10px;
@@ -827,7 +841,7 @@
   border: 1px solid rgba(99,102,241,0.25);
 }
 .att-status-badge.absent {
-  background: rgba(255,255,255,0.04);
+  background: rgba(0,0,0,0.03);
   color: var(--muted);
   border: 1px solid var(--border);
 }
@@ -851,7 +865,7 @@
 .att-day-count {
   font-size: 0.65rem;
   color: var(--muted);
-  background: rgba(255,255,255,0.04);
+  background: rgba(0,0,0,0.03);
   border: 1px solid var(--border);
   padding: 2px 8px;
   border-radius: 100px;
@@ -908,13 +922,13 @@
   .intern-row {
     display: grid !important;
     grid-template-columns: 1fr auto !important;
-    grid-template-rows: auto auto !important;
+    grid-template-rows: auto auto auto !important;
     gap: 0 !important;
     padding: 14px !important;
     align-items: start !important;
   }
 
-  /* Top-left: avatar + name + email */
+  /* Row 1 left: avatar + name + email */
   .intern-row .intern-name-cell {
     grid-column: 1;
     grid-row: 1;
@@ -922,39 +936,56 @@
     align-items: center;
   }
 
-  /* Top-right: shift badge stacked with hours */
-  .intern-row .intern-td:first-of-type {
+  /* Row 1 right: schedule badge */
+  .intern-row > div:nth-child(2) {
     grid-column: 2;
     grid-row: 1;
-    text-align: right;
-    font-size: 0.8rem;
-    font-weight: 700;
-    color: var(--accent);
+    display: flex;
+    justify-content: flex-end;
+    align-items: flex-start;
+  }
+  .intern-schedule-badge {
+    font-size: 0.62rem !important;
+    padding: 2px 7px !important;
+    white-space: nowrap;
   }
 
-  /* Bottom-left: tasks done */
-  .intern-row .intern-td:last-of-type {
+  /* Row 2 left: hours */
+  .intern-row .intern-td:first-of-type {
     grid-column: 1;
+    grid-row: 2;
+    margin-top: 8px;
+    font-size: 0.75rem;
+    color: var(--accent);
+    font-weight: 600;
+  }
+
+  /* Row 2 right: tasks done */
+  .intern-row .intern-td:last-of-type {
+    grid-column: 2;
     grid-row: 2;
     margin-top: 8px;
     font-size: 0.72rem;
     color: var(--muted);
+    text-align: right;
   }
 
-  /* Bottom-right: action buttons */
+  /* Row 3: action buttons spanning full width */
   .intern-row .intern-actions {
-    grid-column: 2;
-    grid-row: 2;
-    margin-top: 8px;
+    grid-column: 1 / -1;
+    grid-row: 3;
+    margin-top: 10px;
     display: flex;
     gap: 6px;
     justify-content: flex-end;
+    border-top: 1px solid var(--border);
+    padding-top: 10px;
   }
 
   .intern-avatar { width: 34px !important; height: 34px !important; font-size: 0.65rem !important; flex-shrink: 0 !important; }
   .intern-name { font-size: 0.82rem; }
-  .intern-email { font-size: 0.63rem; white-space: normal; word-break: break-all; }
-  .btn-icon { font-size: 0.62rem; padding: 4px 8px; }
+  .intern-email { font-size: 0.63rem; word-break: break-all; }
+  .btn-icon { font-size: 0.62rem; padding: 4px 10px; }
 
   /* ══ SOLO TASK CARD LAYOUT ══ */
   .intern-row[style*="1.5fr"] {
@@ -1073,4 +1104,68 @@
   .admin-tab { font-size: 0.6rem; padding: 6px 8px; }
   .att-day-count { display: none; }
   .admin-card { border-radius: 10px; }
+}
+
+/* ── Task row expand ── */
+.task-row-clickable { cursor: pointer; }
+.task-row-clickable:hover { background: rgba(0,0,0,0.02) !important; }
+
+.task-desc-preview {
+  font-size: 0.68rem;
+  color: var(--muted);
+  margin-top: 2px;
+  line-height: 1.4;
+}
+
+.task-desc-expanded {
+  padding: 14px 24px 16px 24px;
+  background: var(--surface2);
+  border-bottom: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  animation: expandIn 0.15s ease;
+}
+@keyframes expandIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.task-desc-label {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+.task-desc-full {
+  font-size: 0.85rem;
+  color: var(--text);
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-width: 680px;
+}
+
+/* ── Textarea in modals ── */
+.modal-field textarea {
+  width: 100%;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: 0.82rem;
+  line-height: 1.6;
+  outline: none;
+  transition: border-color 0.15s;
+  box-sizing: border-box;
+}
+.modal-field textarea:focus {
+  border-color: var(--accent);
+}
+.modal-field textarea::placeholder {
+  color: var(--muted);
+  opacity: 0.7;
 }

@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 
 :root,
 [data-theme="cyber"] {
@@ -10,8 +10,8 @@
   --accent2: #6366f1;
   --text: #e8eaed;
   --muted: #6b7280;
-  --font-display: 'Syne', sans-serif;
-  --font-mono: 'DM Mono', monospace;
+  --font-display: 'Inter', sans-serif;
+  --font-mono: 'Inter', sans-serif;
 }
 
 /* ── THEME: Neon Purple ── */
@@ -24,8 +24,8 @@
   --accent2: #ec4899;
   --text: #ede8f5;
   --muted: #6b6480;
-  --font-display: 'Syne', sans-serif;
-  --font-mono: 'DM Mono', monospace;
+  --font-display: 'Inter', sans-serif;
+  --font-mono: 'Inter', sans-serif;
 }
 
 /* ── THEME: Sunset Orange ── */
@@ -38,8 +38,8 @@
   --accent2: #eab308;
   --text: #f5ede8;
   --muted: #7a6458;
-  --font-display: 'Syne', sans-serif;
-  --font-mono: 'DM Mono', monospace;
+  --font-display: 'Inter', sans-serif;
+  --font-mono: 'Inter', sans-serif;
 }
 
 /* ── THEME: Minimal Black ── */
@@ -52,24 +52,23 @@
   --accent2: #888888;
   --text: #ffffff;
   --muted: #555555;
-  --font-display: 'Syne', sans-serif;
-  --font-mono: 'DM Mono', monospace;
+  --font-display: 'Inter', sans-serif;
+  --font-mono: 'Inter', sans-serif;
 }
 
 /* ── THEME: Minimal White ── */
 [data-theme="minimal-light"] {
-  --bg: #f5f5f5;
+  --bg: #f4f5f7;
   --surface: #ffffff;
-  --surface2: #f0f0f0;
-  --border: #dde1e7;
-  --accent: #111111;
-  --accent2: #444444;
-  --text: #0a0a0a;
-  --muted: #888888;
-  --font-display: 'Syne', sans-serif;
-  --font-mono: 'DM Mono', monospace;
+  --surface2: #eef0f3;
+  --border: #d8dce3;
+  --accent: #2563eb;
+  --accent2: #7c3aed;
+  --text: #0f0f0f;
+  --muted: #6b7280;
+  --font-display: 'Inter', sans-serif;
+  --font-mono: 'Inter', sans-serif;
 }
-
 
 *, *::before, *::after {
   box-sizing: border-box;
@@ -99,8 +98,57 @@ button {
   font-family: var(--font-mono);
 }
 
-input, button {
+input, button, textarea, select {
   font-family: inherit;
+}
+
+/* Global inputs/selects — theme-aware */
+input, textarea, select {
+  background: var(--surface2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 0.82rem;
+  outline: none;
+  transition: border-color 0.15s;
+  color-scheme: light;
+}
+input:focus, textarea:focus, select:focus {
+  border-color: var(--accent);
+}
+input::placeholder, textarea::placeholder {
+  color: var(--muted);
+  opacity: 0.7;
+}
+select option {
+  background: #ffffff;
+  color: #0f0f0f;
+}
+
+/* On dark themes, override color-scheme */
+:root select,
+[data-theme="cyber"] select,
+[data-theme="neon-purple"] select,
+[data-theme="sunset"] select,
+[data-theme="minimal-dark"] select {
+  color-scheme: dark;
+}
+[data-theme="cyber"] select option,
+[data-theme="neon-purple"] select option,
+[data-theme="sunset"] select option,
+[data-theme="minimal-dark"] select option {
+  background: #0e1117;
+  color: #e8eaed;
+}
+[data-theme="minimal-light"] select,
+[data-theme="minimal-light"] input,
+[data-theme="minimal-light"] textarea {
+  color-scheme: light;
+}
+[data-theme="minimal-light"] select option {
+  background: #ffffff;
+  color: #0f0f0f;
 }
 
 @keyframes fadeUp {
