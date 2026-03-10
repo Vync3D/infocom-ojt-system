@@ -7,6 +7,7 @@ import {
   updatePassword,
   reauthenticateWithCredential,
   EmailAuthProvider,
+  sendPasswordResetEmail,
 } from "firebase/auth"
 import {
   getFirestore,
@@ -211,6 +212,11 @@ export async function updateHours(uid, hoursToAdd) {
     const current = snap.data().hoursRendered || 0
     await updateDoc(userRef, { hoursRendered: current + hoursToAdd })
   }
+}
+
+// Admin: send password reset email to an intern
+export async function resetInternPassword(email) {
+  await sendPasswordResetEmail(auth, email)
 }
 
 // Update intern shift

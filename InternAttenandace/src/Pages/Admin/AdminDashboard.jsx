@@ -4,7 +4,7 @@ import ThemePicker from '../../components/ThemePicker'
 import {
   getAllInterns, addIntern, removeIntern,
   getAllTasks, assignTask, assignGroupTask, deleteTask,
-  getAttendanceLogs, getTodayAttendance, logoutUser,
+  getAttendanceLogs, getTodayAttendance, logoutUser, changePassword, resetInternPassword,
   getShiftSettings, saveShiftSettings, editAttendanceRecord,
   getAllAttendanceInRange
 } from '../../firebase'
@@ -13,12 +13,11 @@ import {
 function getInitials(name) {
   return name?.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || '??'
 }
-function avatarStyle(color) {
-  if (!color) return {}
+function avatarStyle() {
   return {
-    background: color + '22',
-    border: `1.5px solid ${color}55`,
-    color: color,
+    background: 'color-mix(in srgb, var(--accent) 15%, transparent)',
+    border: '1.5px solid color-mix(in srgb, var(--accent) 35%, transparent)',
+    color: 'var(--accent)',
   }
 }
 function getAvailableMonths(logs) {
@@ -828,6 +827,130 @@ function SettingsTab({ shiftSettings, onSave }) {
   )
 }
 
+// ── Reset Intern Password Modal ──
+function ResetInternPasswordModal({ intern, onClose }) {
+  const [loading, setLoading] = useState(false)
+  const [done,    setDone]    = useState(false)
+  const [error,   setError]   = useState('')
+
+  const handleReset = async () => {
+    setLoading(true); setError('')
+    try {
+      await resetInternPassword(intern.email)
+      setDone(true)
+    } catch (e) {
+      setError(e.message)
+    }
+    setLoading(false)
+  }
+
+  return (
+    <div className="modal-overlay" style={{ zIndex: 1000 }}>
+      <div className="modal">
+        {done ? (
+          <div style={{ textAlign: 'center', padding: '12px 0' }}>
+            <div style={{ fontSize: '2rem', marginBottom: 10 }}>📧</div>
+            <div className="modal-title">Reset Email Sent!</div>
+            <div className="modal-sub">A password reset link was sent to <strong>{intern.email}</strong>. The intern can use it to set a new password.</div>
+            <div className="modal-actions" style={{ marginTop: 20 }}>
+              <button className="btn-modal-confirm" onClick={onClose}>Done</button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="modal-title">🔑 Reset Password</div>
+            <div className="modal-sub">Send a password reset link to this intern's email.</div>
+            <div className="modal-form">
+              <div style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, padding: '12px 14px', fontSize: '0.8rem', lineHeight: 1.6 }}>
+                <div style={{ fontWeight: 600, marginBottom: 4 }}>{intern.name}</div>
+                <div style={{ color: 'var(--muted)' }}>{intern.email}</div>
+              </div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--muted)', lineHeight: 1.6 }}>
+                A reset link will be sent to the intern's email. They must click it to set their new password. The link expires after 1 hour.
+              </div>
+              {error && <div style={{ color: '#ff5f57', fontSize: '0.75rem' }}>{error}</div>}
+              <div className="modal-actions">
+                <button className="btn-modal-cancel" onClick={onClose}>Cancel</button>
+                <button className="btn-modal-confirm" onClick={handleReset} disabled={loading}>
+                  {loading ? 'Sending...' : '📧 Send Reset Link'}
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── Change Password Modal (Admin) ──
+function AdminChangePwModal({ onClose }) {
+  const [currentPw, setCurrentPw] = useState('')
+  const [newPw,     setNewPw]     = useState('')
+  const [confirmPw, setConfirmPw] = useState('')
+  const [loading,   setLoading]   = useState(false)
+  const [error,     setError]     = useState('')
+  const [success,   setSuccess]   = useState(false)
+
+  const handleSubmit = async () => {
+    if (newPw.length < 6)    { setError('New password must be at least 6 characters.'); return }
+    if (newPw !== confirmPw) { setError('New passwords do not match.'); return }
+    if (newPw === currentPw) { setError('New password must be different from current.'); return }
+    setLoading(true); setError('')
+    try {
+      await changePassword(currentPw, newPw)
+      setSuccess(true)
+    } catch (e) {
+      if (e.code === 'auth/wrong-password' || e.code === 'auth/invalid-credential') setError('Current password is incorrect.')
+      else setError(e.message)
+    }
+    setLoading(false)
+  }
+
+  return (
+    <div className="modal-overlay" style={{ zIndex: 1000 }}>
+      <div className="modal">
+        {success ? (
+          <div style={{ textAlign: 'center', padding: '12px 0' }}>
+            <div style={{ fontSize: '2rem', marginBottom: 10 }}>✅</div>
+            <div className="modal-title">Password Changed!</div>
+            <div className="modal-sub">Your password has been updated successfully.</div>
+            <div className="modal-actions" style={{ marginTop: 20 }}>
+              <button className="btn-modal-confirm" onClick={onClose}>Done</button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="modal-title">🔑 Change Password</div>
+            <div className="modal-sub">Enter your current password to set a new one.</div>
+            <div className="modal-form">
+              <div className="modal-field">
+                <label>Current Password</label>
+                <input type="password" placeholder="Your current password" value={currentPw} onChange={e => setCurrentPw(e.target.value)} />
+              </div>
+              <div className="modal-field">
+                <label>New Password</label>
+                <input type="password" placeholder="Min. 6 characters" value={newPw} onChange={e => setNewPw(e.target.value)} />
+              </div>
+              <div className="modal-field">
+                <label>Confirm New Password</label>
+                <input type="password" placeholder="Repeat new password" value={confirmPw} onChange={e => setConfirmPw(e.target.value)} />
+              </div>
+              {error && <div style={{ color: '#ff5f57', fontSize: '0.75rem' }}>{error}</div>}
+              <div className="modal-actions">
+                <button className="btn-modal-cancel" onClick={onClose}>Cancel</button>
+                <button className="btn-modal-confirm" onClick={handleSubmit} disabled={loading}>
+                  {loading ? 'Saving...' : 'Change Password'}
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ── Main Component ──
 export default function AdminDashboard({ user, onLogout }) {
   const [tab, setTab]             = useState('interns')
@@ -835,7 +958,9 @@ export default function AdminDashboard({ user, onLogout }) {
   const [interns, setInterns]     = useState([])
   const [tasks, setTasks]         = useState([])
   const [modal, setModal]         = useState(null)
-  const [showTheme, setShowTheme] = useState(false)
+  const [showTheme, setShowTheme]             = useState(false)
+  const [showChangePw, setShowChangePw]       = useState(false)
+  const [resetPasswordIntern, setResetPasswordIntern] = useState(null)
   const [selectedIntern, setSelectedIntern]       = useState(null)
   const [selectedTask, setSelectedTask]           = useState(null)
   const [viewingAttendance, setViewingAttendance] = useState(null)
@@ -956,6 +1081,8 @@ export default function AdminDashboard({ user, onLogout }) {
         <DownloadInternExcelModal intern={viewingAttendance} logs={attendanceLogs} onCancel={() => setModal(null)} />
       )}
       {showTheme && <ThemePicker onClose={() => setShowTheme(false)} />}
+      {showChangePw && <AdminChangePwModal onClose={() => setShowChangePw(false)} />}
+      {resetPasswordIntern && <ResetInternPasswordModal intern={resetPasswordIntern} onClose={() => setResetPasswordIntern(null)} />}
 
       <header className="admin-topbar">
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -964,6 +1091,7 @@ export default function AdminDashboard({ user, onLogout }) {
         </div>
         <div className="admin-topbar-right">
           <span style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>{user?.name || 'Admin'}</span>
+          <button className="btn-logout" style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--muted)', borderColor: 'var(--border)' }} onClick={() => setShowChangePw(true)}>🔑 Password</button>
           <button className="btn-logout" style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--muted)', borderColor: 'var(--border)' }} onClick={() => setShowTheme(true)}>🎨 Theme</button>
           <button className="btn-logout" onClick={handleLogout}>⎋ Logout</button>
         </div>
@@ -1017,7 +1145,7 @@ export default function AdminDashboard({ user, onLogout }) {
 
         {/* Main Tabs */}
         <div className="admin-tabs">
-          {[['interns','👥 Interns'],['tasks','✅ Tasks'],['attendance','◷ Attendance'],['settings','📅 Schedule']].map(([key, label]) => (
+          {[['interns','Interns'],['tasks','Tasks'],['attendance','Attendance'],['settings','Schedule']].map(([key, label]) => (
             <button key={key} className={`admin-tab ${tab === key ? 'active' : ''}`}
               onClick={() => { setTab(key); setViewingAttendance(null) }}>{label}</button>
           ))}
@@ -1096,6 +1224,7 @@ export default function AdminDashboard({ user, onLogout }) {
                         <div className="intern-td">{done}/{internTasks.length} done</div>
                         <div className="intern-actions">
                           <button className="btn-icon" onClick={() => { setViewingAttendance(intern); setTab('attendance') }}>◷ Attendance</button>
+                          <button className="btn-icon" title="Reset Password" onClick={() => setResetPasswordIntern(intern)}>🔑</button>
                           <button className="btn-icon danger" onClick={() => { setSelectedIntern(intern); setModal('confirm-remove') }}>✕</button>
                         </div>
                       </div>
